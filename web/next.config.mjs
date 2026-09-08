@@ -8,6 +8,18 @@ const nextConfig = {
   images: {
     remotePatterns: [],
   },
+
+  // Serve the full SakanHub product design (public/design.html) at the
+  // site root. Vercel still detects Next.js from package.json, so the
+  // build succeeds; at request time the rewrite hands `/` to the static
+  // HTML file. The middleware is neutralised below so it does not
+  // intercept `/` before the rewrite fires.
+  async rewrites() {
+    return [
+      { source: '/', destination: '/design.html' },
+    ];
+  },
+
   async headers() {
     return [
       {

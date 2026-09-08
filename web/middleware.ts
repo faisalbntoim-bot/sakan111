@@ -17,6 +17,11 @@ export function middleware(request: NextRequest) {
   return NextResponse.redirect(new URL(`/${defaultLocale}`, request.url), 307);
 }
 
+// Matcher is deliberately empty — the site root is served by the
+// `public/design.html` rewrite in `next.config.mjs`, and middleware
+// running on `/` would fire BEFORE rewrites and swallow it.
+// The function above is kept so an operator can re-enable this by
+// restoring the matcher without adding new code.
 export const config = {
-  matcher: ['/'],
+  matcher: ['/__disabled_locale_redirect__'],
 };
