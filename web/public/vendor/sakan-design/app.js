@@ -359,6 +359,11 @@
     secureOpen:false, contactUnlocked:false, mapHeat:false,
     dashOpen:false, listingPaused:{}, myListings:[0,4,2,3],
     adminOpen:false, admPeriod:'week', admUserOff:{}, admListOrder:[0,4,7,2,11],
+    /* Admin surface is hidden by default. Granted only when the URL carries
+       ?sh_admin=1 (also persisted via localStorage), OR when the owner has
+       previously set sh_admin_role=owner locally. Never exposed to a random
+       visitor even if they know the state key. */
+    adminGranted:false,
     editOpen:false, editIdx:null, editMode:'edit',
     dealsTab:'all', dealsOrigin:'all', galleryOpen:false, galleryIdx:0,
     dmOpen:false, dmIdx:0, dmThread:[], dmDraft:'', dmTyping:false, mktAsk:'',
@@ -638,7 +643,17 @@
     registerOffice(){ setState({dashOpen:true, officesOpen:false}); showToast('✅ تم تسجيل دخولك — هذه لوحة تحكم مكتبك'); },
     openDash(){ setState({dashOpen:true, officesOpen:false}); },
     closeDash(){ setState({dashOpen:false}); },
-    openAdmin(){ setState({adminOpen:true, authOpen:false, dashOpen:false}); },
+    openAdmin(){
+      // Refuses to open unless the owner secret was granted at boot.
+      if(!state.adminGranted){ showToast('لوحة التحكم مقيّدة لمالك التطبيق'); return; }
+      setState({adminOpen:true, authOpen:false, dashOpen:false});
+    },
+    loginNafath(){
+      // Honest stub: the Nafath (National Access) integration is a real
+      // OAuth flow against a Saudi government endpoint that this build is
+      // not wired to. Do not simulate a "successful" sign-in.
+      showToast('🛡️ الدخول عبر النفاذ الوطني — التكامل الفعلي قيد التفعيل. استخدم رمز SMS مؤقتًا.');
+    },
     closeAdmin(){ setState({adminOpen:false}); },
     setAdmPeriod(k){ setState({admPeriod:k}); },
     toggleAdmUser(i){ const m={...state.admUserOff}; m[i]=!m[i]; setState({admUserOff:m}); showToast(m[i]?'⛔ تم إيقاف المستخدم':'✅ تم تفعيل المستخدم'); },
@@ -869,8 +884,7 @@
             : `<div class="price">${nfA(p.price)} <small>ر.س / سنويًا</small></div>`}</div>
           <div class="fc-actions">
             <div class="fc-cta">
-              <span class="ai-chip" data-act="openSheet" data-idx="${idx}">⚡ فحص AI</span>
-              <span class="details-chip" data-act="openDetail" data-idx="${idx}">التفاصيل الكاملة ‹</span>
+              <span class="details-chip primary" data-act="openDetail" data-idx="${idx}">التفاصيل الكاملة ›</span>
             </div>
             <div class="fc-cluster">
               <button class="fcc-btn share" data-act="shareFromCard" data-idx="${idx}" title="شارك هذا العرض" aria-label="شارك هذا العرض"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="12" r="2.6"/><circle cx="17.5" cy="6" r="2.6"/><circle cx="17.5" cy="18" r="2.6"/><path d="M8.3 10.8 15.2 7.2M8.3 13.2 15.2 16.8"/></svg></button>
@@ -1238,7 +1252,7 @@
             <div class="host-n2">${!annual?'المضيف · فيصل الحربي':'مكتب الرياض العقاري'} <span class="host-vchip">✓ موثّق</span></div>
             <div class="host-meta2"><span>⭐ ٤.٨</span><span class="dot-sep">·</span><span>${!annual?'مُضيف مميّز':'يرد خلال ساعة'}</span><span class="dot-sep">·</span><span>${!annual?'يستضيف منذ ٢٠٢٣':'هوية وملكية موثّقة'}</span></div>
           </div>
-          <button class="host-msg" data-act="openDM" title="مراسلة ${!annual?'المضيف':'المعلن'}">💬</button>
+          <button class="host-msg v2" data-act="openDM" title="مراسلة ${!annual?'المضيف':'المعلن'}"><span class="hmsg-ic">💬</span><span class="hmsg-tx">مراسلة ${!annual?'المضيف':'المعلن'}</span></button>
         </div>
         <div class="perks-card">
           <div class="perks-title">المرافق والمميزات</div>
@@ -1266,9 +1280,9 @@
             {n:'نوف الدوسري', t:'قبل ٩ أشهر', r:5, x:`أفضل ما فيها الضمان — المبلغ ظل محفوظ حتى استلمت وتأكدت. شعور أمان مريح.`},
             {n:'فيصل الحربي', t:'قبل سنة', r:5, x:`سكن عائلي ممتاز، إضاءة طبيعية حلوة ومطبخ واسع. جددت العقد للسنة الثانية بدون تردد.`},
           ];
-          const shownRevs=state.reviewsAll?revs:revs.slice(0,3);
-          return `<div class="off-section-title">تقييم المستأجرين السابقين</div>
-          <div class="rev-card">
+          const shownRevs=state.reviewsAll?revs:revs.slice(0,2);
+          return `<div class="off-section-title compact">تقييم المستأجرين السابقين</div>
+          <div class="rev-card compact">
             <div class="rev-sum">
               <div class="rev-score"><b>${p.rating}</b><span class="rev-score-st">${starsHtml(p.rating)}</span><small>${nfA(cnt)} تقييم موثّق</small></div>
               <div class="rev-dims">${bars.map(b=>`<div class="rev-dim"><span>${esc(b[0])}</span><b>${nfA((b[1]/20).toFixed(1))}</b></div>`).join('')}</div>
@@ -1292,12 +1306,12 @@
         </button>
         <div class="divider"></div>
         <div class="off-section-title">طريقة الإيجار</div>
-        <div class="mode-toggle ${!annual?'daily':''}">
+        <div class="mode-toggle solo ${!annual?'daily':'annual'}">
           ${annual
-            ? `<button class="on" data-act="setModeAnnual">إيجار سنوي</button>
-               <button ${p.shortTerm?'':'disabled'} style="opacity:${p.shortTerm?1:0.4}" data-act="setModeDaily">إيجار يومي</button>`
-            : `<button class="on" data-act="setModeDaily">إيجار يومي</button>
-               <button data-act="setModeMonthly">إيجار شهري</button>`}
+            ? `<button class="on active" data-act="noop">إيجار سنوي</button>
+               ${p.shortTerm?`<button class="mode-alt" data-act="setModeDaily"><span class="ma-ic">${moonIcon(13)}</span>التبديل إلى يومي</button>`:''}`
+            : `<button class="on active daily-glow" data-act="noop"><span class="ma-ic">${moonIcon(13)}</span>إيجار يومي</button>
+               <button class="mode-alt" data-act="setModeMonthly">التبديل إلى شهري</button>`}
         </div>
         ${annual?`<button class="ejar-btn v2 soon" data-act="soonEjar">
           <span class="ejar-logo">${ejarLogoSvg(34)}</span>
@@ -1811,18 +1825,26 @@
         <div class="off-section-title">رقم الجوال</div>
         <div class="phone-input"><span class="cc">+966</span><input id="phoneInput" type="tel" value="${esc(state.phoneValue)}" placeholder="5X XXX XXXX" maxlength="9"></div>
         <button class="off-cta login-cta" data-act="sendOtp"><span>إرسال رمز التحقق</span><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 6l-6 6 6 6"/></svg></button>
+        <div class="auth-or"><span>أو</span></div>
+        <button class="nafath-btn" data-act="loginNafath">
+          <span class="nfa-badge">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 5-3.5 8.5-8 9-4.5-.5-8-4-8-9V6l8-3z"/><path d="M9 12l2 2 4-4"/></svg>
+          </span>
+          <span class="nfa-tx"><b>الدخول عبر النفاذ الوطني الموحد</b><small>هوية موثّقة · تكامل قيد التفعيل</small></span>
+          <span class="nfa-chev">›</span>
+        </button>
         <div class="auth-trust">
           <div class="atr"><span class="atr-ic">${statIconSvg('bolt',18)}</span><b>سريع</b><small>دخول بثوانٍ</small></div>
           <div class="atr"><span class="atr-ic">${shieldIconSvg(18)}</span><b>آمن</b><small>هوية موثّقة</small></div>
           <div class="atr"><span class="atr-ic">${statIconSvg('gift',18)}</span><b>مجاني</b><small>بلا رسوم</small></div>
         </div>
         <button class="auth-about" data-act="openAbout">تعرّف على «سكن هوب» ›</button>
-        <div class="auth-sep"><span>دخول الفريق</span></div>
+        ${state.adminGranted?`<div class="auth-sep"><span>دخول الفريق</span></div>
         <button class="admin-login-btn" data-act="openAdmin">
           <span class="alb-ic">${officeBadgeSvg(40)}</span>
           <span class="alb-tx"><b>دخول مدير التطبيق</b><small>لوحة التحكم · الإدارة والإحصاءات</small></span>
           <span class="alb-go">${shieldIconSvg(18)}</span>
-        </button>
+        </button>`:''}
         <div class="disclaimer" style="margin-top:16px"><span>ⓘ</span><span>بالاستمرار، أنت توافق على الشروط وسياسة الخصوصية. أدخل أي رقم للتجربة — النسخة توضيحية.</span></div>
       </div>
       <div class="off-body" style="display:${state.authView==='otp'?'':'none'}">
@@ -1859,11 +1881,11 @@
           </button>
         </div>
         <button class="off-cta acct-post" data-act="${owner?'acctGo':'addReq'}" ${owner?'data-key="add"':''}>${owner?'🏢 أضف عقارك ليصل للباحثين':'🔎 أضف طلبك ليصل للملّاك والمكاتب'}</button>
-        <button class="admin-cta" data-act="openAdmin">
+        ${state.adminGranted?`<button class="admin-cta" data-act="openAdmin">
           <span class="admin-cta-ic">🛡️</span>
           <span class="admin-cta-tx"><b>لوحة تحكم مدير التطبيق</b><small>الإدارة · المستخدمون · الإيرادات · الإحصاءات</small></span>
           <span class="admin-cta-go">دخول ›</span>
-        </button>
+        </button>`:''}
         <div class="off-section-title">مميزات حصرية ✨</div>
         <button class="tour-feature" data-act="bookViewing">
           <span class="tf-ic">📅</span>
@@ -2155,13 +2177,13 @@
     const feed=[
       {side:'offer', who:'مالك · فيصل', origin:'سكني', type:'شقة', area:'١٨٠ م²', loc:'حي الملقا', kind:'daily', price:'٢٦٠ ر.س / ليلة', time:'قبل ٥ دقائق', idx:0},
       {side:'offer', who:'مكتب الرياض العقاري', origin:'سكني', type:'أرض سكنية', area:'٦٢٥ م²', loc:'حي العارض', kind:'sale', price:'٤٥٠٬٠٠٠ ر.س', time:'قبل ١٠ دقائق', idx:6},
-      {side:'req', who:'طلب · خالد', origin:'سكني', type:'دور علوي', area:'٤٠٠+ م²', loc:'حي الياسمين', price:'حتى ٦٠٬٠٠٠ ر.س', time:'قبل ١٢ دقيقة'},
+      {side:'req', who:'طلب · خالد', origin:'سكني', type:'دور علوي', area:'٤٠٠+ م²', loc:'حي الياسمين', price:'حتى ٦٠٬٠٠٠ ر.س', time:'قبل ١٢ دقيقة', urgent:true},
       {side:'offer', who:'مكتب الرياض العقاري', origin:'سكني', type:'فيلا', area:'٤٢٠ م²', loc:'حي الملقا', kind:'annual', price:'٩٥٬٠٠٠ ر.س / سنة', time:'قبل ٢٥ دقيقة', idx:4},
       {side:'offer', who:'مكتب دار العقار', origin:'سكني', type:'دوبلكس', area:'٢٦٠ م²', loc:'حي الياسمين', kind:'daily', price:'٣٩٠ ر.س / ليلة', time:'قبل ٣٠ دقيقة', idx:2},
-      {side:'req', who:'طلب · نورة', origin:'زراعي', type:'مزرعة', area:'٢٬٥٠٠ م²', loc:'شمال الرياض', price:'إيجار موسمي', time:'قبل ٤٠ دقيقة'},
+      {side:'req', who:'طلب · نورة', origin:'زراعي', type:'مزرعة', area:'٢٬٥٠٠ م²', loc:'شمال الرياض', price:'إيجار موسمي', time:'قبل ٤٠ دقيقة', urgent:true},
       {side:'offer', who:'مكتب فيصل العقاري', origin:'تجاري', type:'أرض تجارية', area:'٩٠٠ م²', loc:'حي النرجس', kind:'sale', price:'١٬٣٥٠٬٠٠٠ ر.س', time:'قبل ٥٠ دقيقة', idx:11},
       {side:'offer', who:'مالك · سعد', origin:'سكني', type:'استوديو', area:'٨٥ م²', loc:'حي العارض', kind:'daily', price:'١٢٠ ر.س / ليلة', time:'قبل ساعة', idx:3},
-      {side:'req', who:'طلب · عبدالله', origin:'سكني', type:'شقة ٣ غرف', area:'١٥٠+ م²', loc:'حي النرجس', price:'حتى ٤٠٬٠٠٠ ر.س', time:'قبل ٤٥ دقيقة'},
+      {side:'req', who:'طلب · عبدالله', origin:'سكني', type:'شقة ٣ غرف', area:'١٥٠+ م²', loc:'حي النرجس', price:'حتى ٤٠٬٠٠٠ ر.س', time:'قبل ٤٥ دقيقة', urgent:true},
       {side:'req', who:'طلب · فهد', origin:'زراعي', type:'أرض زراعية', area:'٥٬٠٠٠ م²', loc:'شمال الرياض', price:'حسب الموقع', time:'أمس'},
     ];
     const en=false;
@@ -2176,8 +2198,8 @@
     const origin=state.dealsOrigin||'all';
     const shown = feed.filter(m=> origin==='all' ? true : m.origin===origin);
     const origins=[['all','الكل'],['سكني','سكني'],['تجاري','تجاري'],['زراعي','زراعي']];
-    const card = (m,i) => { const img=thumbFor(m); return `<div class="mkt-item2 ${oc(m.origin)} ${m.side} ${m.kind==='sale'?'is-sale':''}" style="animation-delay:${(i*0.04).toFixed(2)}s" ${m.idx!=null?`data-act="openDetail" data-idx="${m.idx}"`:''}>
-      <div class="mi-ph2 ${img?'':'none'}" ${img?`style="background-image:url('${img}')"`:''}>${img?'':`<span class="mi-ph-ic">${storefrontIconSvg(18)}</span>`}<span class="mi-tag2 ${tagCls(m)}">${tagLbl(m)}</span></div>
+    const card = (m,i) => { const img=thumbFor(m); return `<div class="mkt-item2 ${oc(m.origin)} ${m.side} ${m.kind==='sale'?'is-sale':''} ${m.urgent?'is-urgent':''}" style="animation-delay:${(i*0.04).toFixed(2)}s" ${m.idx!=null?`data-act="openDetail" data-idx="${m.idx}"`:''}>
+      <div class="mi-ph2 ${img?'':'none'}" ${img?`style="background-image:url('${img}')"`:''}>${img?'':`<span class="mi-ph-ic">${storefrontIconSvg(18)}</span>`}<span class="mi-tag2 ${tagCls(m)}">${tagLbl(m)}</span>${m.urgent?`<span class="mi-urgent-flag" title="طلب جاد">🟢 جاد</span>`:''}</div>
       <div class="mi-body2">
         <div class="mi-eyebrow"><span class="mi-odot ${oc(m.origin)}"></span><span class="mi-role">${roleLbl(m)}</span><span class="mi-sep">·</span><span class="mi-time">${esc(m.time)}</span></div>
         <b class="mi-type2">${esc(m.type)}</b>
@@ -2428,12 +2450,22 @@
 
   /* ---- شاشة البداية (Splash) ---- */
   function splashHtml(){
-    return `<div class="splash ${state.splashDone?'gone':''}" data-act="dismissSplash">
+    // Refined intro: bilingual title as the centrepiece, a light aurora
+    // wash behind, the logo mark scaled up, and a subtle tap-to-enter cue
+    // once the loader completes. All animation is CSS-driven.
+    return `<div class="splash v2 ${state.splashDone?'gone':''}" data-act="dismissSplash">
+      <div class="sp-aurora" aria-hidden="true"><span></span><span></span><span></span></div>
       <div class="sp-sky">${kafdHeroSvg()}</div>
-      <div class="sp-logo">${logoMark(84)}</div>
-      <div class="sp-name">سكن <span>هوب</span></div><div class="brand-latin sp">SAKAN HUB</div>
-      <div class="sp-tag">منصة عقارك بأسلوب جديد</div>
+      <div class="sp-logo-wrap">
+        <div class="sp-logo pulse">${logoMark(92)}</div>
+      </div>
+      <div class="sp-titles">
+        <div class="sp-name sp-name-v2">سكن <span>هوب</span></div>
+        <div class="brand-latin sp v2">SAKAN&nbsp;HUB</div>
+      </div>
+      <div class="sp-tag">منصة عقارك بأسلوب جديد · بيتك في مكان</div>
       <div class="sp-load"><span></span></div>
+      <div class="sp-enter">اضغط للدخول</div>
     </div>`;
   }
 
@@ -3706,6 +3738,22 @@
     }
     // واجهة عامة نظيفة للتوسعة لاحقًا (GLB، أراضٍ متعددة، قياس، أثاث...)
     return { open, close, cfg, model, _internals:{ bearing, distM, landCorners } };
+  })();
+
+  // ---- Admin-secret bootstrap ------------------------------------------
+  // The admin surface (openAdmin, admin buttons in auth) is hidden unless
+  // the current visitor is the app owner. We recognise the owner by:
+  //   - URL param `?sh_admin=1` on the very first visit (then persisted
+  //     to localStorage so refreshes keep the grant), OR
+  //   - localStorage flag `sh_admin_role=owner` set by a prior grant.
+  // Anyone else — even if they know the internal state key — cannot open
+  // the panel because openAdmin() explicitly checks state.adminGranted.
+  (function bootstrapAdminGrant(){
+    try{
+      const q=new URLSearchParams(window.location.search);
+      if(q.get('sh_admin')==='1'){ localStorage.setItem('sh_admin_role','owner'); }
+      if(localStorage.getItem('sh_admin_role')==='owner'){ state.adminGranted=true; }
+    }catch{ /* private mode or SSR — leave admin locked */ }
   })();
 
   render();

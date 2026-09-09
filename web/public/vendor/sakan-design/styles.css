@@ -5656,3 +5656,172 @@ img{ -webkit-user-drag:none; user-select:none; }
 .perks-card .perks-title{ letter-spacing:-.2px; }
 .perk{ transition:transform .12s ease, background .18s ease; }
 .perk:active{ transform:scale(.96); }
+
+/* ================================================================
+   Phase 1 Refinements — appended (no existing rule redefined).
+   All new selectors are additive to keep the original design intact.
+   ================================================================ */
+
+/* ---- Splash v2 — bilingual, aurora background, subtle enter cue ---- */
+.splash.v2 .sp-aurora{
+  position:absolute; inset:0; overflow:hidden; z-index:0; pointer-events:none;
+}
+.splash.v2 .sp-aurora span{
+  position:absolute; border-radius:50%; filter:blur(60px); opacity:.55;
+  animation:auroraFloat 8s ease-in-out infinite alternate;
+}
+.splash.v2 .sp-aurora span:nth-child(1){ width:340px; height:340px; background:#1FD9A6; top:-40px; right:-40px; }
+.splash.v2 .sp-aurora span:nth-child(2){ width:280px; height:280px; background:#0E7C66; top:38%; left:-60px; animation-duration:10s; animation-delay:.6s; }
+.splash.v2 .sp-aurora span:nth-child(3){ width:260px; height:260px; background:#C7A252; bottom:-60px; right:22%; animation-duration:12s; animation-delay:1.2s; opacity:.35; }
+@keyframes auroraFloat{ from{ transform:translateY(-14px) scale(1); } to{ transform:translateY(18px) scale(1.05); } }
+
+.splash.v2 .sp-logo-wrap{ display:flex; justify-content:center; margin-top:14px; }
+.splash.v2 .sp-logo.pulse{ animation:logoPulse 2.6s ease-in-out infinite; }
+@keyframes logoPulse{ 0%,100%{ transform:scale(1); } 50%{ transform:scale(1.05); } }
+
+.splash.v2 .sp-titles{ text-align:center; margin-top:18px; }
+.splash.v2 .sp-name-v2{
+  font-size:38px; font-weight:900; letter-spacing:-1px;
+  background:linear-gradient(180deg,#fff 0%,#D8F5EC 100%);
+  -webkit-background-clip:text; background-clip:text; color:transparent;
+  text-shadow:0 2px 30px rgba(31,217,166,.35);
+}
+.splash.v2 .brand-latin.sp.v2{
+  display:block; margin-top:6px;
+  font-size:14px; font-weight:700; letter-spacing:6px;
+  color:rgba(232,255,247,.85);
+  animation:latinFadeIn .9s ease .3s both;
+}
+@keyframes latinFadeIn{ from{ opacity:0; letter-spacing:2px; } to{ opacity:.85; letter-spacing:6px; } }
+
+.splash.v2 .sp-enter{
+  position:absolute; bottom:32px; left:0; right:0;
+  text-align:center; color:rgba(232,255,247,.7);
+  font-size:12px; font-weight:600; letter-spacing:2px;
+  animation:enterBlink 1.8s ease-in-out infinite; opacity:0;
+  animation-delay:1.6s;
+}
+@keyframes enterBlink{ 0%,100%{ opacity:.35; } 50%{ opacity:.9; } }
+
+/* ---- Mode toggle solo — hide the "other" mode button ---- */
+.mode-toggle.solo{
+  display:flex; gap:10px; align-items:stretch;
+  padding:6px; border-radius:14px;
+  background:linear-gradient(180deg,#F8FBFA 0%,#F0F6F3 100%);
+  border:1px solid rgba(14,124,102,.14);
+}
+.mode-toggle.solo button.on.active{
+  flex:1; display:inline-flex; align-items:center; justify-content:center; gap:8px;
+  background:linear-gradient(180deg,#0E7C66 0%,#0A6B54 100%);
+  color:#fff; font-weight:800;
+  border-radius:10px; padding:12px 16px;
+  box-shadow:0 4px 14px rgba(14,124,102,.24);
+}
+.mode-toggle.solo button.on.active .ma-ic{ display:inline-flex; color:#D8F5EC; }
+.mode-toggle.solo button.on.active.daily-glow{
+  /* Gold-tinted glow so daily is instantly recognisable as short-stay */
+  background:linear-gradient(180deg,#B58A2C 0%,#8A6A1A 100%);
+  box-shadow:0 4px 14px rgba(181,138,44,.32);
+}
+.mode-toggle.solo button.mode-alt{
+  display:inline-flex; align-items:center; gap:6px;
+  background:transparent; color:#5B6B65;
+  font-weight:700; font-size:13px;
+  border:1px dashed rgba(14,124,102,.28); border-radius:10px;
+  padding:8px 12px; cursor:pointer;
+  transition:background .18s ease, color .18s ease, border-color .18s ease;
+}
+.mode-toggle.solo button.mode-alt:hover{
+  background:rgba(14,124,102,.06); color:#0E7C66; border-color:#0E7C66;
+}
+.mode-toggle.solo button.mode-alt .ma-ic{ opacity:.75; }
+
+/* ---- Host message button v2 — larger, clearer ---- */
+.host-msg.v2{
+  display:inline-flex; align-items:center; gap:6px;
+  padding:10px 14px; border-radius:10px;
+  background:linear-gradient(180deg,#0E7C66 0%,#0A6B54 100%);
+  color:#fff; border:none; cursor:pointer;
+  font-weight:700; font-size:13px;
+  box-shadow:0 2px 8px rgba(14,124,102,.24);
+  transition:transform .12s ease, box-shadow .18s ease;
+}
+.host-msg.v2:hover{ transform:translateY(-1px); box-shadow:0 4px 12px rgba(14,124,102,.32); }
+.host-msg.v2 .hmsg-ic{ font-size:16px; }
+.host-msg.v2 .hmsg-tx{ line-height:1; }
+
+/* ---- Nafath button (honest stub) ---- */
+.auth-or{
+  display:flex; align-items:center; gap:10px;
+  margin:14px 0 10px; color:#9AA6A1; font-size:12px; font-weight:600;
+}
+.auth-or::before, .auth-or::after{
+  content:""; flex:1; height:1px; background:rgba(14,124,102,.15);
+}
+.nafath-btn{
+  width:100%; display:flex; align-items:center; gap:12px;
+  padding:14px 16px; border-radius:14px;
+  background:linear-gradient(180deg,#0C4C3A 0%,#083629 100%);
+  color:#E7FBF4; border:1px solid rgba(31,217,166,.28); cursor:pointer;
+  font-family:inherit; text-align:right;
+  transition:transform .12s ease, box-shadow .18s ease, border-color .18s ease;
+  box-shadow:0 4px 14px rgba(12,76,58,.18);
+}
+.nafath-btn:hover{
+  transform:translateY(-1px); border-color:#1FD9A6;
+  box-shadow:0 6px 18px rgba(12,76,58,.28);
+}
+.nafath-btn .nfa-badge{
+  width:44px; height:44px; border-radius:12px;
+  display:inline-grid; place-items:center;
+  background:rgba(31,217,166,.14); color:#1FD9A6;
+  flex-shrink:0;
+}
+.nafath-btn .nfa-tx{ flex:1; display:flex; flex-direction:column; gap:2px; }
+.nafath-btn .nfa-tx b{ font-size:14px; font-weight:800; color:#fff; }
+.nafath-btn .nfa-tx small{ font-size:11px; color:rgba(216,245,236,.75); }
+.nafath-btn .nfa-chev{ color:rgba(216,245,236,.6); font-size:20px; }
+
+/* ---- Urgent (serious) request flag on market cards ---- */
+.mkt-item2.is-urgent{
+  border-color:rgba(31,217,166,.42); box-shadow:0 4px 14px rgba(14,124,102,.14);
+}
+.mkt-item2 .mi-urgent-flag{
+  position:absolute; top:8px; right:8px; z-index:2;
+  display:inline-flex; align-items:center; gap:4px;
+  padding:4px 10px; border-radius:999px;
+  background:linear-gradient(180deg,#1FD9A6 0%,#0E7C66 100%);
+  color:#fff; font-size:11px; font-weight:800; letter-spacing:.2px;
+  box-shadow:0 2px 8px rgba(14,124,102,.32);
+  animation:urgentPulse 1.8s ease-in-out infinite;
+}
+@keyframes urgentPulse{ 0%,100%{ transform:scale(1); } 50%{ transform:scale(1.06); } }
+.mkt-item2 .mi-ph2{ position:relative; }
+
+/* ---- Market cards — tighter spacing between eyebrow and title ---- */
+.mkt-item2 .mi-eyebrow{ margin-bottom:2px; }
+.mkt-item2 .mi-type2{ line-height:1.15; margin:0 0 4px; }
+.mkt-item2 .mi-meta2{ margin-bottom:6px; }
+
+/* ---- Compact reviews section ---- */
+.off-section-title.compact{
+  margin-block:16px 8px; font-size:14px;
+}
+.rev-card.compact{
+  padding:12px 14px;
+}
+.rev-card.compact .rev-sum{ padding-bottom:8px; }
+.rev-card.compact .rev-thread{ gap:8px; }
+.rev-card.compact .rvx-bubble{ padding:10px 12px; }
+.rev-card.compact .rvx-bubble p{ margin:6px 0 0; font-size:13px; line-height:1.5; }
+.rev-card.compact .rev-more{ margin-top:8px; font-size:13px; padding:8px 12px; }
+
+/* ---- Details chip primary (was accompanied by AI chip) ---- */
+.details-chip.primary{
+  background:linear-gradient(180deg,#0E7C66 0%,#0A6B54 100%);
+  color:#fff; padding:8px 14px; border-radius:999px;
+  font-weight:800; font-size:12px;
+  box-shadow:0 2px 8px rgba(14,124,102,.28);
+  transition:transform .12s ease;
+}
+.details-chip.primary:active{ transform:scale(.97); }
