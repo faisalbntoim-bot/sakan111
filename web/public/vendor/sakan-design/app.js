@@ -664,6 +664,20 @@
       // not wired to. Do not simulate a "successful" sign-in.
       showToast('🛡️ الدخول عبر النفاذ الوطني — التكامل الفعلي قيد التفعيل. استخدم رمز SMS مؤقتًا.');
     },
+    bookFromGallery(){
+      // Close the gallery, put the current property in daily mode, and
+      // reset the calendar so the user starts from a clean picker.
+      // The detail view's calendar is the booking widget: it computes
+      // nights → subtotal → cleaning → service → VAT → total, and the
+      // pay button opens the payment methods sheet. This action just
+      // brings the user to that widget.
+      setState({galleryOpen:false, rentalMode:'daily', calSelStart:null, calSelEnd:null});
+      // Scroll the calendar block into view after the paint tick.
+      setTimeout(()=>{
+        const cal=document.querySelector('.daily-perks, .daily-price-row, .cal-grid');
+        if(cal && cal.scrollIntoView) cal.scrollIntoView({behavior:'smooth', block:'start'});
+      }, 60);
+    },
     setAnnualMonths(k){
       // Read the date picker first so it survives the re-render.
       const dp=document.getElementById('annualStart');
@@ -1567,18 +1581,30 @@
     const p=properties[state.detailIdx]||properties[0];
     const g=galleryFor(p,state.detailIdx);
     const n=g.length;
+    // Daily-capable properties get a sticky "احجز الآن" CTA anchored to
+    // the bottom of the gallery. It closes the gallery, ensures the
+    // detail view is in daily mode, and scrolls the calendar picker
+    // into focus so the user can pick nights immediately.
+    const canBookDaily = p.shortTerm === true;
     return `<div class="gallery ${state.galleryOpen?'open':''}">
       <div class="gal-top">
         <button class="gal-close" data-act="closeGallery" aria-label="إغلاق">✕</button>
         <div class="gal-ttx"><b>معرض الصور</b><small>${esc(p.type)} — ${esc(p.neighborhood)} · ${nfA(n)} صور</small></div>
       </div>
-      <div class="gal-scroll">
+      <div class="gal-scroll ${canBookDaily?'has-book-cta':''}">
         ${g.map((it,k)=>`<figure class="gal-slide">
           <div class="gal-photo" style="background-image:url('${it.src}')"></div>
           <figcaption class="gal-cap2"><span class="gc-lbl">📷 ${esc(it.label)}</span><span class="gc-num">صورة ${nfA(k+1)} من ${nfA(n)}</span></figcaption>
         </figure>`).join('')}
         <div class="gal-end">— نهاية المعرض —</div>
       </div>
+      ${canBookDaily?`<div class="gal-book-bar">
+        <div class="gbb-price"><b>${nfA(p.dailyRate)}</b> <small>ر.س / ليلة</small></div>
+        <button class="gbb-cta" data-act="bookFromGallery">
+          <span>احجز الآن</span>
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 6l-6 6 6 6"/></svg>
+        </button>
+      </div>`:''}
     </div>`;
   }
 
@@ -2003,6 +2029,17 @@
             <div class="acct-name">${owner?'مكتب فيصل العقاري':'أهلًا، فيصل'} ${owner?'<span class="acct-verify">✓ موثّق</span>':''}</div>
             <div class="acct-phone">${owner?'⭐ ٤.٨ · رخصة فال ١٢٠٠٠٠٨٨٤٥':'+966 '+esc(state.phoneValue||'5X XXX XXXX')}</div>
           </div>
+          ${state.adminGranted?`<!-- ADMIN GEAR ICON — visible ONLY to the app owner.
+               To relocate, cut this <button> and paste it into any HTML block
+               (header, hero, floating widget). It's self-contained and needs
+               no additional wiring; the openAdmin action already double-checks
+               state.adminGranted before opening the panel. -->
+          <button class="admin-gear" data-act="openAdmin" title="لوحة تحكم مدير التطبيق" aria-label="لوحة التحكم">
+            <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+          </button>`:''}
           <button class="acct-logout" data-act="logout">خروج</button>
         </div>
         <div class="off-section-title">اختر نوع حسابك ✨</div>
@@ -2336,10 +2373,18 @@
     const tagLbl = m => m.kind==='sale' ? 'للبيع' : (m.side==='req'?'مطلوب':'معروض');
     const tagCls = m => m.kind==='sale' ? 'sale' : m.side;
     const origin=state.dealsOrigin||'all';
-    const shown = feed.filter(m=> origin==='all' ? true : m.origin===origin);
-    const origins=[['all','الكل'],['سكني','سكني'],['تجاري','تجاري'],['زراعي','زراعي']];
+    // A soft "urgent" indicator now lives IN the filter row (next to
+    // زراعي) instead of as a badge on every thumbnail. Selecting it
+    // filters the feed to only urgent items; deselecting returns to
+    // whatever origin category was active.
+    const showUrgent = state.dealsOrigin==='urgent';
+    const shown = feed.filter(m => {
+      if(showUrgent) return !!m.urgent;
+      return origin==='all' ? true : m.origin===origin;
+    });
+    const origins=[['all','الكل'],['سكني','سكني'],['تجاري','تجاري'],['زراعي','زراعي'],['urgent','جاد',true]];
     const card = (m,i) => { const img=thumbFor(m); return `<div class="mkt-item2 ${oc(m.origin)} ${m.side} ${m.kind==='sale'?'is-sale':''} ${m.urgent?'is-urgent':''}" style="animation-delay:${(i*0.04).toFixed(2)}s" ${m.idx!=null?`data-act="openDetail" data-idx="${m.idx}"`:''}>
-      <div class="mi-ph2 ${img?'':'none'}" ${img?`style="background-image:url('${img}')"`:''}>${img?'':`<span class="mi-ph-ic">${storefrontIconSvg(18)}</span>`}<span class="mi-tag2 ${tagCls(m)}">${tagLbl(m)}</span>${m.urgent?`<span class="mi-urgent-flag" title="طلب جاد">🟢 جاد</span>`:''}</div>
+      <div class="mi-ph2 ${img?'':'none'}" ${img?`style="background-image:url('${img}')"`:''}>${img?'':`<span class="mi-ph-ic">${storefrontIconSvg(18)}</span>`}<span class="mi-tag2 ${tagCls(m)}">${tagLbl(m)}</span></div>
       <div class="mi-body2">
         <div class="mi-eyebrow"><span class="mi-odot ${oc(m.origin)}"></span><span class="mi-role">${roleLbl(m)}</span><span class="mi-sep">·</span><span class="mi-time">${esc(m.time)}</span></div>
         <b class="mi-type2">${esc(m.type)}</b>
@@ -2363,7 +2408,15 @@
           <span class="dh2-stat live"><span class="live-dot"></span> ${en?'Live':'مباشر'}</span>
         </div>
       </div>
-      <div class="deals-origins">${origins.map(o=>`<button class="dorg2 ${origin===o[0]?'on':''}" data-act="setDealsOrigin" data-key="${esc(o[0])}">${o[0]!=='all'?`<span class="dorg-dot ${oc(o[0])}"></span>`:''}${esc(o[1])}</button>`).join('')}</div>
+      <div class="deals-origins">${origins.map(o=>{
+        const isUrgentChip = o[2]===true;
+        const activeCls = isUrgentChip ? (showUrgent?'on':'') : (origin===o[0] && !showUrgent ?'on':'');
+        return `<button class="dorg2 ${activeCls} ${isUrgentChip?'is-urgent-chip':''}" data-act="setDealsOrigin" data-key="${esc(o[0])}">${
+          isUrgentChip
+            ? `<span class="dorg-dot urgent"></span>`
+            : (o[0]!=='all'?`<span class="dorg-dot ${oc(o[0])}"></span>`:'')
+        }${esc(o[1])}</button>`;
+      }).join('')}</div>
       <div class="deals-body2">
         <div class="deals-ticker calm">${en?'Newest offers & requests arriving…':'يصل الآن أحدث العروض والطلبات…'}</div>
         ${shown.length?shown.map(card).join(''):`<div class="deals-empty"><span>🔎</span><b>لا توجد نتائج بهذا التصنيف</b><small>جرّب تصنيفًا آخر أو أضف طلبك ليطابقه سكن هوب.</small></div>`}

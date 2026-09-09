@@ -6021,3 +6021,136 @@ img{ -webkit-user-drag:none; user-select:none; }
 
 /* Icon-driven gold accent for daily-mode surfaces on the market view */
 .mkt-item2.is-sale .mi-tag2.sale{ background:linear-gradient(180deg,#C7A252,#8A6A1A); }
+
+/* ================================================================
+   Phase 3 — audit-driven refinements
+   ================================================================ */
+
+/* ---- Admin gear icon (owner-only) ---- */
+.acct-card .admin-gear{
+  width:38px; height:38px; border-radius:50%;
+  display:inline-grid; place-items:center;
+  background:linear-gradient(180deg,#0E7C66 0%,#0A6B54 100%);
+  color:#fff; border:none; cursor:pointer;
+  box-shadow:0 3px 10px rgba(14,124,102,.28);
+  margin-inline-end:6px;
+  transition:transform .18s ease, box-shadow .18s ease;
+}
+.acct-card .admin-gear:hover{
+  transform:rotate(30deg); box-shadow:0 5px 14px rgba(14,124,102,.38);
+}
+.acct-card .admin-gear svg{ opacity:.98; }
+
+/* ---- Urgent filter chip (dorg2.is-urgent-chip) — soft green, calm ---- */
+.dorg2.is-urgent-chip{
+  border:1.5px solid rgba(31,153,110,.32);
+  background:linear-gradient(180deg,#EEFBF5 0%,#DEF5EA 100%);
+  color:#0A6B54; font-weight:800;
+}
+.dorg2.is-urgent-chip .dorg-dot.urgent{
+  width:8px; height:8px; border-radius:50%;
+  background:#22B27E; box-shadow:0 0 0 3px rgba(34,178,126,.18);
+}
+.dorg2.is-urgent-chip.on{
+  background:linear-gradient(180deg,#1FD9A6 0%,#0E7C66 100%);
+  color:#fff; border-color:#0A6B54;
+  box-shadow:0 4px 12px rgba(14,124,102,.22);
+}
+.dorg2.is-urgent-chip.on .dorg-dot.urgent{
+  background:#fff; box-shadow:0 0 0 3px rgba(255,255,255,.28);
+}
+
+/* De-emphasise the urgent-card highlight (was pulsing). The chip
+   filter is now the primary way users see urgent items. */
+.mkt-item2.is-urgent{
+  border-color:rgba(31,153,110,.28);
+  box-shadow:0 2px 10px rgba(31,153,110,.10);
+}
+.mkt-item2 .mi-urgent-flag{ display:none !important; }
+@keyframes urgentPulse{ /* keep noop so any prior binding does nothing */
+  0%,100%{ transform:scale(1); } 50%{ transform:scale(1); }
+}
+
+/* ---- Gallery bottom booking bar ---- */
+.gallery .gal-scroll.has-book-cta{ padding-bottom:92px; }
+.gallery .gal-book-bar{
+  position:absolute; inset-inline:0; inset-block-end:0;
+  z-index:5;
+  display:flex; align-items:center; gap:12px;
+  padding:14px 18px calc(14px + env(safe-area-inset-bottom, 0));
+  background:linear-gradient(180deg, rgba(12,21,18,0) 0%, rgba(12,21,18,.85) 40%, rgba(12,21,18,.98) 100%);
+  backdrop-filter:blur(10px);
+}
+.gallery .gbb-price{
+  color:#fff; font-family:inherit;
+}
+.gallery .gbb-price b{
+  font-size:22px; font-weight:900;
+  background:linear-gradient(90deg,#FFE7A0 0%,#C7A252 100%);
+  -webkit-background-clip:text; background-clip:text; color:transparent;
+}
+.gallery .gbb-price small{ font-size:12px; color:rgba(255,255,255,.72); font-weight:700; }
+.gallery .gbb-cta{
+  margin-inline-start:auto;
+  display:inline-flex; align-items:center; gap:6px;
+  background:linear-gradient(180deg,#0E7C66 0%,#0A6B54 100%);
+  color:#fff; border:none; cursor:pointer;
+  padding:14px 22px; border-radius:14px;
+  font-family:inherit; font-weight:800; font-size:15px;
+  box-shadow:0 6px 18px rgba(14,124,102,.34);
+  transition:transform .12s ease, box-shadow .18s ease;
+}
+.gallery .gbb-cta:hover{
+  transform:translateY(-1px); box-shadow:0 8px 22px rgba(14,124,102,.42);
+}
+
+/* ---- Reviews — tighter still (compact v2) ---- */
+.rev-card.compact{ padding:10px 12px; border-radius:14px; }
+.rev-card.compact .rev-sum{
+  display:flex; align-items:center; gap:12px;
+  padding-bottom:8px; border-bottom:1px dashed rgba(14,124,102,.14);
+}
+.rev-card.compact .rev-score{
+  display:flex; align-items:center; gap:6px; padding:0;
+}
+.rev-card.compact .rev-score b{ font-size:20px; }
+.rev-card.compact .rev-score small{ font-size:11px; color:#5B6B65; margin-inline-start:4px; }
+.rev-card.compact .rev-dims{
+  display:flex; flex-wrap:wrap; gap:6px; margin-inline-start:auto;
+}
+.rev-card.compact .rev-dim{
+  padding:3px 8px; border-radius:999px;
+  background:rgba(14,124,102,.08); font-size:11px; font-weight:700;
+}
+.rev-card.compact .rev-dim b{ color:#0A6B54; margin-inline-start:4px; }
+.rev-card.compact .rev-thread{ gap:6px; margin-top:8px; }
+.rev-card.compact .rvx{ display:flex; gap:8px; align-items:flex-start; }
+.rev-card.compact .rvx-av{
+  width:28px; height:28px; border-radius:50%; flex-shrink:0;
+  display:grid; place-items:center; color:#fff; font-size:12px; font-weight:900;
+}
+.rev-card.compact .rvx-bubble{
+  padding:8px 10px; border-radius:10px;
+  background:#F8FBFA; border:1px solid rgba(14,124,102,.08);
+  flex:1; min-width:0;
+}
+.rev-card.compact .rvx-top{ display:flex; align-items:center; gap:6px; font-size:12px; }
+.rev-card.compact .rvx-top b{ font-size:12px; font-weight:800; }
+.rev-card.compact .rvx-v{
+  font-size:10px; padding:1px 6px; border-radius:999px;
+  background:#E7FBF4; color:#0A6B54; font-weight:700;
+}
+.rev-card.compact .rvx-when{ font-size:10px; color:#8A968F; margin-inline-start:auto; }
+.rev-card.compact .rvx-stars{ font-size:11px; }
+.rev-card.compact .rvx-bubble p{ margin:4px 0 0; font-size:12px; line-height:1.5; color:#3B4B47; }
+.rev-card.compact .rev-more{
+  display:block; width:100%; margin-top:8px;
+  padding:8px; border-radius:10px;
+  background:transparent; color:#0E7C66;
+  border:1px dashed rgba(14,124,102,.24);
+  font-family:inherit; font-weight:700; font-size:12px;
+  cursor:pointer;
+}
+.rev-card.compact .rev-more:hover{
+  background:rgba(14,124,102,.06); border-style:solid;
+}
