@@ -678,9 +678,21 @@
     },
     openGuests(){ setState({guestsSheetOpen:true}); },
     closeGuests(){ setState({guestsSheetOpen:false}); },
-    /* Booking sheet — open resets all sections to just-dates expanded. */
+    /* Booking sheet — open resets all sections to just-dates expanded.
+       Kept for the in-SPA sheet used from secondary surfaces. The main
+       "احجز الآن" CTA now navigates to the real Next.js booking route
+       via goToBookingRoute below (dates → price → review), so both
+       code paths coexist without regressing existing entry points. */
     openBookSheet(){ setState({bookSheetOpen:true, bookExpDates:true, bookExpGuests:false, bookExpPay:false}); },
     closeBookSheet(){ setState({bookSheetOpen:false}); },
+    /* Navigate to the new booking flow at
+       /ar/properties/<idx>/booking. Uses the current detail index as
+       the property id — matches lib/properties.ts ordering. */
+    goToBookingRoute(){
+      const idx = (typeof state.detailIdx === 'number' ? state.detailIdx : 0);
+      const loc = (location.pathname.split('/')[1] === 'en') ? 'en' : 'ar';
+      window.location.href = '/' + loc + '/properties/' + idx + '/booking';
+    },
     /* Accordion — toggle a section, collapse the others. Auto-advance:
        when nights become >0, guests opens; when guests set, pay opens. */
     toggleBookSection(k){
@@ -1549,7 +1561,7 @@
                 <div class="bs-price"><b>${nfA(p.dailyRate)}</b> <small>ر.س / ليلة</small></div>
                 <div class="bs-badge">${moonIcon(12)} إيجار يومي · إلغاء مجاني قبل ٤٨ ساعة</div>
               </div>
-              <button class="bs-cta" data-act="openBookSheet">
+              <button class="bs-cta" data-act="goToBookingRoute">
                 <span>احجز الآن</span>
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 6l-6 6 6 6"/></svg>
               </button>
@@ -1763,7 +1775,7 @@
       </div>
       ${canBookDaily?`<div class="gal-book-bar">
         <div class="gbb-price"><b>${nfA(p.dailyRate)}</b> <small>ر.س / ليلة</small></div>
-        <button class="gbb-cta" data-act="bookFromGallery">
+        <button class="gbb-cta" data-act="goToBookingRoute">
           <span>احجز الآن</span>
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 6l-6 6 6 6"/></svg>
         </button>

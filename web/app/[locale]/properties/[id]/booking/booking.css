@@ -1,0 +1,319 @@
+/* ==========================================================================
+   Booking flow styles — scoped to /[locale]/properties/[id]/booking/*.
+   Loaded once by the segment's layout.tsx; does not leak into the SPA
+   at /ar because Next.js only ships this stylesheet with the routes
+   under this segment.
+   ========================================================================== */
+
+.bkw{
+  min-height:100dvh;
+  background:#F7F5EE;
+  color:#0C1512;
+  font-family:'SF Arabic','Segoe UI','Noto Sans Arabic','Tajawal',system-ui,-apple-system,Tahoma,sans-serif;
+  padding-bottom:120px;
+}
+.bkw *{ box-sizing:border-box; }
+
+/* ---- Header (BookingChrome) --------------------------------------------- */
+.bkc{
+  position:sticky; top:0; z-index:20;
+  display:grid;
+  grid-template-columns:36px 1fr 36px;
+  grid-template-rows:auto auto;
+  align-items:center;
+  gap:8px 12px;
+  padding:12px 16px 14px;
+  background:rgba(247,245,238,.92);
+  backdrop-filter:saturate(1.1) blur(8px);
+  -webkit-backdrop-filter:saturate(1.1) blur(8px);
+  border-bottom:1px solid rgba(14,124,102,.08);
+}
+.bkc-back{
+  grid-column:1; grid-row:1;
+  width:36px; height:36px;
+  display:flex; align-items:center; justify-content:center;
+  border:0; background:#fff;
+  border-radius:12px;
+  color:#0C1512; cursor:pointer;
+  box-shadow:0 1px 3px rgba(0,0,0,.05);
+  transition:background .15s ease, box-shadow .15s ease;
+}
+.bkc-back:hover{ background:#fefefe; box-shadow:0 2px 6px rgba(0,0,0,.08); }
+/* In RTL, chevron arrow visually points to the right (back = forward in flow). */
+.bkc-back svg{ transform:scaleX(-1); }
+.bkc-brand{
+  grid-column:2; grid-row:1;
+  display:flex; align-items:center; justify-content:center; gap:8px;
+  text-decoration:none; color:#0A3E33;
+  font-weight:900;
+}
+.bkc-brand-mark{
+  display:inline-flex; align-items:center; justify-content:center;
+  width:26px; height:26px;
+  background:linear-gradient(150deg,#0E7C66 0%,#0A6B54 100%);
+  color:#fff; border-radius:8px;
+  font-family:'Inter',system-ui,sans-serif; font-weight:900;
+}
+.bkc-brand-name{ font-size:14px; }
+.bkc-spacer{ grid-column:3; grid-row:1; }
+.bkc-title{
+  grid-column:1 / -1; grid-row:2;
+  margin:6px 0 0;
+  font-size:22px; font-weight:900; color:#0A3E33;
+  text-align:start;
+}
+
+/* ---- Page container ----------------------------------------------------- */
+.bkp{
+  max-width:640px;
+  margin:0 auto;
+  padding:16px;
+  display:flex; flex-direction:column; gap:16px;
+}
+
+/* ---- Section shell ------------------------------------------------------ */
+.bks{
+  background:#fff;
+  border:1px solid rgba(14,124,102,.10);
+  border-radius:20px;
+  padding:18px;
+  box-shadow:0 2px 8px rgba(10,62,51,.03);
+}
+.bks-title{
+  margin:0 0 12px;
+  font-size:15px; font-weight:800; color:#0A3E33;
+}
+.bks-sub{
+  margin:-4px 0 12px;
+  font-size:12px; color:#5B6B65;
+}
+
+/* ---- RtlCalendar -------------------------------------------------------- */
+.rcal{ direction:rtl; }
+.rcal-head{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:0 4px 12px;
+}
+.rcal-title{
+  font-size:15px; font-weight:800; color:#0A3E33;
+}
+.rcal-nav{
+  width:32px; height:32px;
+  border:0; background:#F5F7F1;
+  border-radius:10px;
+  display:flex; align-items:center; justify-content:center;
+  color:#0A3E33; cursor:pointer;
+  transition:background .15s ease, opacity .15s ease;
+}
+.rcal-nav:hover:not(:disabled){ background:#E9EFE5; }
+.rcal-nav:disabled{ opacity:.35; cursor:not-allowed; }
+.rcal-weekdays{
+  display:grid; grid-template-columns:repeat(7,1fr);
+  gap:4px; margin-bottom:6px;
+}
+.rcal-wd{
+  text-align:center; font-size:11px; font-weight:800; color:#5B6B65;
+  padding:6px 0;
+}
+.rcal-grid{
+  display:grid; grid-template-columns:repeat(7,1fr);
+  gap:4px;
+}
+.rcal-day{
+  min-height:44px;
+  display:flex; align-items:center; justify-content:center;
+  border:0; background:transparent;
+  border-radius:12px;
+  font-family:inherit; font-size:14px; font-weight:700;
+  color:#0C1512; cursor:pointer;
+  transition:background .15s ease, color .15s ease, transform .12s ease;
+}
+.rcal-day.pad{ cursor:default; }
+.rcal-day:not(.pad):not(.disabled):hover{
+  background:rgba(14,124,102,.10); transform:scale(1.04);
+}
+.rcal-day.disabled{
+  color:#C4CCC7; text-decoration:line-through; cursor:not-allowed;
+}
+.rcal-day.range{
+  background:rgba(14,124,102,.12);
+  color:#0A6B54; font-weight:800;
+  border-radius:0;
+}
+.rcal-day.sel{
+  background:linear-gradient(180deg,#0E7C66 0%,#0A6B54 100%);
+  color:#fff; font-weight:900;
+  box-shadow:0 3px 10px rgba(14,124,102,.28);
+  transform:scale(1.04);
+  border-radius:12px;
+}
+
+/* ---- GuestsPicker ------------------------------------------------------- */
+.gp{ display:flex; flex-direction:column; gap:14px; }
+.gp-row{
+  display:flex; align-items:center; justify-content:space-between;
+  gap:12px;
+  padding:12px 0;
+  border-bottom:1px dashed rgba(14,124,102,.12);
+}
+.gp-row:last-of-type{ border-bottom:0; }
+.gp-tx{ display:flex; flex-direction:column; gap:2px; }
+.gp-tx b{ font-size:14px; font-weight:800; color:#0C1512; }
+.gp-tx span{ font-size:12px; color:#5B6B65; }
+.gp-ctrl{ display:flex; align-items:center; gap:12px; }
+.gp-btn{
+  width:36px; height:36px;
+  border-radius:50%;
+  border:1.5px solid rgba(14,124,102,.32);
+  background:#fff; color:#0A6B54;
+  font-size:18px; font-weight:800;
+  cursor:pointer;
+  display:flex; align-items:center; justify-content:center;
+  transition:transform .12s ease, background .15s ease, border-color .15s ease, opacity .15s ease;
+}
+.gp-btn:hover:not(:disabled){ background:#F5FAF6; transform:scale(1.06); }
+.gp-btn:disabled{ opacity:.35; cursor:not-allowed; }
+.gp-val{
+  min-width:24px; text-align:center;
+  font-size:15px; font-weight:800; color:#0C1512;
+}
+.gp-note{
+  margin-top:2px;
+  padding:8px 10px;
+  background:#F5F7F1;
+  border-radius:10px;
+  font-size:11.5px; color:#5B6B65; font-weight:600;
+}
+
+/* ---- PropertyMiniCard --------------------------------------------------- */
+.pmc{
+  display:flex; align-items:center; gap:12px;
+  background:#fff;
+  border:1px solid rgba(14,124,102,.10);
+  border-radius:16px;
+  padding:12px;
+  box-shadow:0 2px 8px rgba(10,62,51,.03);
+}
+.pmc-thumb{
+  flex-shrink:0;
+  width:64px; height:64px;
+  border-radius:14px;
+  background-size:cover; background-position:center;
+  display:flex; align-items:center; justify-content:center;
+  color:rgba(255,255,255,.85);
+  font-weight:900;
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.12);
+}
+.pmc-thumb-mark{
+  font-size:22px;
+  text-shadow:0 1px 2px rgba(0,0,0,.18);
+}
+.pmc-body{ display:flex; flex-direction:column; gap:2px; min-width:0; }
+.pmc-name{ font-size:14px; font-weight:800; color:#0C1512; }
+.pmc-loc{ font-size:12px; color:#5B6B65; }
+.pmc-rating{ font-size:12px; font-weight:800; color:#B58A2C; }
+
+/* ---- Info rows on price/review pages ------------------------------------ */
+.bk-info{ display:flex; flex-direction:column; gap:10px; }
+.bk-info-row{
+  display:flex; justify-content:space-between; align-items:baseline;
+  padding:10px 0;
+  border-bottom:1px dashed rgba(14,124,102,.12);
+}
+.bk-info-row:last-child{ border-bottom:0; }
+.bk-info-row .bk-k{ font-size:13px; font-weight:700; color:#5B6B65; }
+.bk-info-row .bk-v{ font-size:14px; font-weight:800; color:#0C1512; text-align:end; }
+.bk-info-row .bk-v small{ display:block; font-size:11px; font-weight:600; color:#5B6B65; margin-top:2px; }
+
+/* ---- Price breakdown ---------------------------------------------------- */
+.bk-price{ display:flex; flex-direction:column; gap:6px; }
+.bk-price .pr-row{
+  display:flex; justify-content:space-between; align-items:center;
+  padding:10px 0;
+  font-size:13.5px; color:#0C1512;
+}
+.bk-price .pr-row + .pr-row{
+  border-top:1px dashed rgba(14,124,102,.12);
+}
+.bk-price .pr-row.total{
+  margin-top:6px;
+  padding-top:14px;
+  border-top:2px solid rgba(14,124,102,.20);
+  font-size:16px; font-weight:900; color:#0A3E33;
+}
+.bk-price .pr-row.total .pr-v{ color:#0A6B54; font-size:20px; }
+
+/* ---- Coupon row --------------------------------------------------------- */
+.bk-coupon{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:12px 14px;
+  background:#F5F7F1;
+  border:1px dashed rgba(14,124,102,.20);
+  border-radius:12px;
+  color:#0A6B54; font-size:13px; font-weight:700;
+  cursor:pointer;
+}
+.bk-coupon svg{ opacity:.7; }
+
+/* ---- Sticky CTA --------------------------------------------------------- */
+.bk-sticky{
+  position:fixed;
+  bottom:0; left:0; right:0;
+  z-index:30;
+  padding:14px 16px calc(14px + env(safe-area-inset-bottom));
+  background:linear-gradient(180deg, rgba(247,245,238,0) 0%, rgba(247,245,238,.95) 30%, rgba(247,245,238,1) 100%);
+  display:flex; justify-content:center;
+}
+.bk-sticky-inner{
+  width:100%; max-width:640px;
+  display:flex; align-items:center; gap:12px;
+}
+.bk-sticky-tx{
+  display:flex; flex-direction:column; gap:2px;
+  flex:1; min-width:0;
+}
+.bk-sticky-tx b{ font-size:15px; font-weight:900; color:#0A3E33; }
+.bk-sticky-tx small{ font-size:11.5px; color:#5B6B65; font-weight:600; }
+.bk-cta{
+  flex-shrink:0;
+  min-width:180px;
+  padding:14px 22px;
+  border:0; border-radius:14px;
+  background:linear-gradient(180deg,#0E7C66 0%,#0A6B54 100%);
+  color:#fff;
+  font-family:inherit; font-weight:900; font-size:14.5px;
+  cursor:pointer;
+  box-shadow:0 6px 18px rgba(14,124,102,.28);
+  transition:transform .12s ease, box-shadow .18s ease, opacity .15s ease;
+}
+.bk-cta:hover:not(:disabled){
+  transform:translateY(-1px);
+  box-shadow:0 8px 22px rgba(14,124,102,.34);
+}
+.bk-cta:disabled{ opacity:.45; cursor:not-allowed; box-shadow:none; }
+
+/* ---- Not-found tile ----------------------------------------------------- */
+.bk-missing{
+  text-align:center;
+  padding:48px 16px;
+  color:#5B6B65;
+}
+.bk-missing b{ display:block; font-size:16px; color:#0A3E33; margin-bottom:6px; }
+.bk-missing a{
+  display:inline-block; margin-top:14px;
+  padding:10px 18px;
+  background:#fff; border:1px solid rgba(14,124,102,.20);
+  color:#0A6B54; border-radius:10px;
+  text-decoration:none; font-weight:800; font-size:13px;
+}
+
+/* ---- Small screens ------------------------------------------------------ */
+@media (max-width:520px){
+  .bkc-title{ font-size:20px; }
+  .bks{ padding:16px; border-radius:18px; }
+  .bk-cta{ min-width:0; flex:1; padding:14px 18px; }
+  .rcal-day{ min-height:40px; font-size:13px; }
+}
+
+/* Prevent horizontal overflow at any width. */
+html, body{ overflow-x:hidden; }
