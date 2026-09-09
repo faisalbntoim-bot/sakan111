@@ -364,6 +364,16 @@
        previously set sh_admin_role=owner locally. Never exposed to a random
        visitor even if they know the state key. */
     adminGranted:false,
+    /* Signup role picker + license capture. All values are local until a
+       backend verifies them; verifyStatus is honest ("pending"). */
+    signupOpen:false,
+    signupRole:'seeker',     // seeker | owner | office | marketer
+    signupLicenseREGA:'',    // real-estate advertisement licence #
+    signupLicenseFAL:'',     // FAL licence (offices/marketers)
+    signupVerifyStatus:'pending', // pending | submitted | verified
+    /* Annual rental picker */
+    annualMonths:12,
+    annualStartYMD:'',       // yyyy-mm-dd
     editOpen:false, editIdx:null, editMode:'edit',
     dealsTab:'all', dealsOrigin:'all', galleryOpen:false, galleryIdx:0,
     dmOpen:false, dmIdx:0, dmThread:[], dmDraft:'', dmTyping:false, mktAsk:'',
@@ -654,6 +664,43 @@
       // not wired to. Do not simulate a "successful" sign-in.
       showToast('🛡️ الدخول عبر النفاذ الوطني — التكامل الفعلي قيد التفعيل. استخدم رمز SMS مؤقتًا.');
     },
+    setAnnualMonths(k){
+      // Read the date picker first so it survives the re-render.
+      const dp=document.getElementById('annualStart');
+      if(dp && dp.value) state.annualStartYMD = dp.value;
+      setState({annualMonths: parseInt(k,10)||12});
+    },
+    /* Signup role + licence steps (all local — no backend verification here) */
+    pickSignupRole(k){
+      // Preserve any partially-typed licence numbers so the re-render
+      // doesn't blow them away. Reads DOM directly — no oninput needed.
+      const rega = document.getElementById('signupLicREGA');
+      const fal  = document.getElementById('signupLicFAL');
+      if(rega) state.signupLicenseREGA = rega.value;
+      if(fal)  state.signupLicenseFAL  = fal.value;
+      setState({signupRole:k});
+    },
+    submitSignupProfile(){
+      const rega = document.getElementById('signupLicREGA');
+      const fal  = document.getElementById('signupLicFAL');
+      state.signupLicenseREGA = rega ? rega.value.trim() : state.signupLicenseREGA;
+      state.signupLicenseFAL  = fal  ? fal.value.trim()  : state.signupLicenseFAL;
+      const r=state.signupRole;
+      const needsREGA = r==='owner' || r==='office';
+      const needsFAL  = r==='office' || r==='marketer';
+      if(needsREGA && !state.signupLicenseREGA){
+        showToast('يرجى إدخال رقم رخصة الإعلان العقاري (REGA)'); return;
+      }
+      if(needsFAL && !state.signupLicenseFAL){
+        showToast('يرجى إدخال رقم رخصة فال (FAL)'); return;
+      }
+      try{ localStorage.setItem('sh_user_role', r); }catch{}
+      showToast('✅ تم استلام بيانات حسابك. التحقق من الرخصة قيد المراجعة.');
+      setState({
+        signupVerifyStatus:'submitted', signupOpen:false, authView:'account',
+        loggedIn:true, userRole: (r==='seeker'?'seeker':'owner')
+      });
+    },
     closeAdmin(){ setState({adminOpen:false}); },
     setAdmPeriod(k){ setState({admPeriod:k}); },
     toggleAdmUser(i){ const m={...state.admUserOff}; m[i]=!m[i]; setState({admUserOff:m}); showToast(m[i]?'⛔ تم إيقاف المستخدم':'✅ تم تفعيل المستخدم'); },
@@ -709,8 +756,17 @@
       showToast('📩 تم إرسال رمز التحقق (تجريبي — الرمز ظاهر بمعاينة الرسالة بالأسفل)');
     },
     verifyOtp(){
-      // demo mode: أي رقم/رمز يفتح الحساب
-      showToast('✅ تم تسجيل الدخول بنجاح'); setState({loggedIn:true, authView:'account'});
+      // demo mode: any code proceeds. First-time users land on the signup
+      // role picker so we capture role + REGA/FAL licences before opening
+      // the account tab. Returning users (localStorage flag) skip it.
+      let known=false;
+      try{ known = !!localStorage.getItem('sh_user_role'); }catch{}
+      showToast('✅ تم تسجيل الدخول بنجاح');
+      if(known){
+        setState({loggedIn:true, authView:'account'});
+      } else {
+        setState({authView:'signup'});
+      }
     },
     setRole(r){ setState({userRole:r}); },
     logout(){ setState({loggedIn:false, authView:'login', authOpen:false, phoneValue:''}); showToast('👋 تم تسجيل الخروج'); },
@@ -1186,6 +1242,36 @@
     const staySubtotal=nights*p.dailyRate;
     const dService=Math.round(staySubtotal*0.12), dVat=Math.round(dService*0.15), dTotal=staySubtotal+p.cleaning+dService+dVat;
     const aBase=p.price, aService=Math.round(aBase*0.025), aVat=Math.round(aService*0.15), aTotal=aBase+aService+aVat;
+    /* Reviews block extracted once so we can place it wherever the current
+       mode needs. In annual mode it stays in the "old" slot before the mode
+       toggle; in daily mode it drops after the host-offer block so the
+       flow reads features → offerings → ratings → about-host. */
+    const reviewsHtml = (function(){
+      const cnt=Math.max(18, p.sample-13);
+      const bars=[['النظافة',96],['الموقع',93],['تعامل المالك',90],['القيمة مقابل السعر',88]];
+      const revs=[
+        {n:'سعود الودعاني', t:'قبل شهر', r:5, x:`سكنت في الشقة سنة كاملة، ٣ غرف واسعة ومريحة للعائلة. المالك متعاون والصيانة تجي بسرعة.`},
+        {n:'منى العتيبي', t:'قبل ٣ أشهر', r:4, x:`الموقع ممتاز وقريب من المدارس، التكييف بارد والدهان جديد. الموقف أحيانًا مزدحم بس مقبول.`},
+        {n:'طارق الشهري', t:'قبل ٥ أشهر', r:5, x:`استلمت الشقة بحالة ممتازة مطابقة للإعلان تمامًا، والعقد موثّق عبر المنصة بكل سهولة.`},
+        {n:'ريم القحطاني', t:'قبل ٦ أشهر', r:5, x:`تجربة سلسة من أول تواصل حتى الاستلام. الحي هادئ والخدمات قريبة، أنصح فيها بشدة.`},
+        {n:'عبدالله المطيري', t:'قبل ٧ أشهر', r:4, x:`الشقة نظيفة والتشطيب راقٍ. تأخّر بسيط في تسليم المفاتيح لكن المكتب اعتذر وتم الحل.`},
+        {n:'نوف الدوسري', t:'قبل ٩ أشهر', r:5, x:`أفضل ما فيها الضمان — المبلغ ظل محفوظ حتى استلمت وتأكدت. شعور أمان مريح.`},
+        {n:'فيصل الحربي', t:'قبل سنة', r:5, x:`سكن عائلي ممتاز، إضاءة طبيعية حلوة ومطبخ واسع. جددت العقد للسنة الثانية بدون تردد.`},
+      ];
+      const shownRevs=state.reviewsAll?revs:revs.slice(0,2);
+      return `<div class="off-section-title compact">تقييم المستأجرين السابقين</div>
+      <div class="rev-card compact">
+        <div class="rev-sum">
+          <div class="rev-score"><b>${p.rating}</b><span class="rev-score-st">${starsHtml(p.rating)}</span><small>${nfA(cnt)} تقييم موثّق</small></div>
+          <div class="rev-dims">${bars.map(b=>`<div class="rev-dim"><span>${esc(b[0])}</span><b>${nfA((b[1]/20).toFixed(1))}</b></div>`).join('')}</div>
+        </div>
+        <div class="rev-thread">${shownRevs.map(r=>`<div class="rvx">
+          <span class="rvx-av" style="background:${avc(r.n)}">${ini(r.n)}</span>
+          <div class="rvx-bubble"><div class="rvx-top"><b>${esc(r.n)}</b><span class="rvx-v">✓ موثّق</span><span class="rvx-when">${esc(r.t)}</span></div><span class="rvx-stars">${starsHtml(r.r)}</span><p>${esc(r.x)}</p></div>
+        </div>`).join('')}</div>
+        <button class="rev-more" data-act="toggleReviews">${state.reviewsAll?'عرض أقل ▲':`المزيد من التعليقات (${nfA(cnt)}) ▾`}</button>
+      </div>`;
+    })();
     const payMethodsHtml = `<div class="pay-methods">
       <button class="pay-m applepay" data-act="payNow"><svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor"><path d="M17.2 12.3c0-1.9 1.6-2.9 1.7-2.9-1-1.4-2.4-1.6-2.9-1.6-1.2-.1-2.4.7-3 .7-.6 0-1.6-.7-2.6-.7-1.3 0-2.6.8-3.2 2-1.4 2.4-.4 6 1 8 .7.9 1.4 2 2.4 1.9 1-.1 1.3-.6 2.5-.6s1.5.6 2.6.6 1.7-.9 2.3-1.8c.7-1 1-2 1-2.1 0 0-1.9-.8-2.3-2.8zM15.3 6.4c.5-.7.9-1.6.8-2.5-.8 0-1.8.5-2.4 1.2-.5.6-1 1.5-.8 2.4.9.1 1.8-.4 2.4-1.1z"/></svg> Apple&nbsp;Pay</button>
       <button class="pay-m mada" data-act="payNow"><span class="mada-lbl">مدى</span></button>
@@ -1268,32 +1354,7 @@
             <span class="perk insp"><span class="perk-ic">${statIconSvg('verified',15)}</span>فحص العقار <b>٩٦٪</b></span>
           </div>
         </div>
-        ${(function(){
-          const cnt=Math.max(18, p.sample-13);
-          const bars=[['النظافة',96],['الموقع',93],['تعامل المالك',90],['القيمة مقابل السعر',88]];
-          const revs=[
-            {n:'سعود الودعاني', t:'قبل شهر', r:5, x:`سكنت في الشقة سنة كاملة، ٣ غرف واسعة ومريحة للعائلة. المالك متعاون والصيانة تجي بسرعة.`},
-            {n:'منى العتيبي', t:'قبل ٣ أشهر', r:4, x:`الموقع ممتاز وقريب من المدارس، التكييف بارد والدهان جديد. الموقف أحيانًا مزدحم بس مقبول.`},
-            {n:'طارق الشهري', t:'قبل ٥ أشهر', r:5, x:`استلمت الشقة بحالة ممتازة مطابقة للإعلان تمامًا، والعقد موثّق عبر المنصة بكل سهولة.`},
-            {n:'ريم القحطاني', t:'قبل ٦ أشهر', r:5, x:`تجربة سلسة من أول تواصل حتى الاستلام. الحي هادئ والخدمات قريبة، أنصح فيها بشدة.`},
-            {n:'عبدالله المطيري', t:'قبل ٧ أشهر', r:4, x:`الشقة نظيفة والتشطيب راقٍ. تأخّر بسيط في تسليم المفاتيح لكن المكتب اعتذر وتم الحل.`},
-            {n:'نوف الدوسري', t:'قبل ٩ أشهر', r:5, x:`أفضل ما فيها الضمان — المبلغ ظل محفوظ حتى استلمت وتأكدت. شعور أمان مريح.`},
-            {n:'فيصل الحربي', t:'قبل سنة', r:5, x:`سكن عائلي ممتاز، إضاءة طبيعية حلوة ومطبخ واسع. جددت العقد للسنة الثانية بدون تردد.`},
-          ];
-          const shownRevs=state.reviewsAll?revs:revs.slice(0,2);
-          return `<div class="off-section-title compact">تقييم المستأجرين السابقين</div>
-          <div class="rev-card compact">
-            <div class="rev-sum">
-              <div class="rev-score"><b>${p.rating}</b><span class="rev-score-st">${starsHtml(p.rating)}</span><small>${nfA(cnt)} تقييم موثّق</small></div>
-              <div class="rev-dims">${bars.map(b=>`<div class="rev-dim"><span>${esc(b[0])}</span><b>${nfA((b[1]/20).toFixed(1))}</b></div>`).join('')}</div>
-            </div>
-            <div class="rev-thread">${shownRevs.map(r=>`<div class="rvx">
-              <span class="rvx-av" style="background:${avc(r.n)}">${ini(r.n)}</span>
-              <div class="rvx-bubble"><div class="rvx-top"><b>${esc(r.n)}</b><span class="rvx-v">✓ موثّق</span><span class="rvx-when">${esc(r.t)}</span></div><span class="rvx-stars">${starsHtml(r.r)}</span><p>${esc(r.x)}</p></div>
-            </div>`).join('')}</div>
-            <button class="rev-more" data-act="toggleReviews">${state.reviewsAll?'عرض أقل ▲':`المزيد من التعليقات (${nfA(cnt)}) ▾`}</button>
-          </div>`;
-        })()}
+        ${annual ? reviewsHtml : ''}
         <button class="secure-banner" data-act="openSecure">
           <span class="scb-ic">🔒</span>
           <span class="scb-tx"><b>محميّ بضمان سكن هوب</b><small>ادفع بأمان — مبلغك محتجز حتى توثيق العقد واستلام العقار</small></span>
@@ -1317,23 +1378,57 @@
           <span class="ejar-logo">${ejarLogoSvg(34)}</span>
           <span class="ejar-tx"><b>توثيق العقد رسميًا</b><small>توثيق يحفظ حقوق الطرفين — ننقل الصك والهويات والمدة تلقائيًا</small></span>
           <span class="soon-tag">قريبًا</span>
-        </button>`:`<div class="host-offer">
+        </button>`:`<div class="host-offer compact">
           <div class="ho-h"><span class="ho-ic">${statIconSvg('spark',14)}</span><b>ما يقدّمه المضيف</b><span class="ho-tag">للإقامة اليومية</span></div>
-          <div class="ho-grid">
-            <div class="ho-it"><span class="ho-em">🧴</span><b>مستلزمات استحمام</b><small>شامبو · صابون · مناشف نظيفة</small></div>
-            <div class="ho-it"><span class="ho-em">🛏️</span><b>مفروشات وسرير مجهّز</b><small>ملاءات ومخدّات نظيفة</small></div>
-            <div class="ho-it"><span class="ho-em">☕</span><b>ركن قهوة وشاي</b><small>قهوة · شاي · سكّر · كبسولات</small></div>
-            <div class="ho-it"><span class="ho-em">📶</span><b>واي فاي مجاني عالي السرعة</b><small>حتى ١٠٠ ميجابت</small></div>
-            <div class="ho-it"><span class="ho-em">🅿️</span><b>موقف سيارة خاص</b><small>مجاني للضيوف</small></div>
-            <div class="ho-it"><span class="ho-em">🧺</span><b>تنظيف بين الحجوزات</b><small>معتمد من سكن هوب</small></div>
+          <div class="ho-chips">
+            <span class="ho-chip" title="مستلزمات استحمام"><span class="ho-em">🧴</span>مستلزمات استحمام</span>
+            <span class="ho-chip" title="مفروشات وسرير مجهّز"><span class="ho-em">🛏️</span>مفروشات</span>
+            <span class="ho-chip" title="ركن قهوة وشاي"><span class="ho-em">☕</span>قهوة وشاي</span>
+            <span class="ho-chip" title="واي فاي عالي السرعة"><span class="ho-em">📶</span>واي فاي</span>
+            <span class="ho-chip" title="موقف سيارة خاص"><span class="ho-em">🅿️</span>موقف خاص</span>
+            <span class="ho-chip" title="تنظيف بين الحجوزات"><span class="ho-em">🧺</span>تنظيف</span>
           </div>
         </div>
-        <div class="host-brief">
+        ${reviewsHtml}
+        <div class="host-brief v2">
           <div class="hb-head"><span class="hb-av" style="background:#0E7C66">ف</span><div><b>عن المضيف</b><small>فيصل الحربي · مُضيف موثّق منذ ٢٠٢٣</small></div><span class="hb-star">⭐ ٤٫٩</span></div>
           <p>مضيف نشط يستقبل الضيوف بحفاوة، يحرص على نظافة المكان والردّ خلال ساعة، ويقدّم إرشادات مختصرة للحي وأشهر مطاعمه.</p>
           <div class="hb-stats"><span><b>${nfA(128)}</b>إقامة</span><span><b>${nfA(97)}٪</b>معدّل الرد</span><span><b>≤ ١ س</b>وقت الرد</span></div>
         </div>`}
         <div style="display:${annual?'':'none'}">
+          ${(function(){
+            // Annual rental picker: number of months (12/24/36/custom) + start date
+            const months = state.annualMonths || 12;
+            const monthly = Math.round(aBase / 12);
+            const total = monthly * months;
+            const start = state.annualStartYMD || new Date().toISOString().slice(0,10);
+            const endDate = (function(){
+              const d=new Date(start); d.setMonth(d.getMonth()+months);
+              return d.toISOString().slice(0,10);
+            })();
+            const arDate = s => { try{ return new Date(s).toLocaleDateString('ar-SA'); }catch{ return s; } };
+            const chip = (m,l) => `<button class="ann-chip ${months===m?'on':''}" data-act="setAnnualMonths" data-key="${m}">${l}</button>`;
+            return `<div class="annual-picker">
+              <div class="off-section-title compact">مدة الإيجار</div>
+              <div class="ann-months-row">
+                ${chip(6,'٦ أشهر')}${chip(12,'سنة')}${chip(18,'١٨ شهر')}${chip(24,'سنتان')}${chip(36,'٣ سنوات')}
+              </div>
+              <div class="ann-dates">
+                <label class="ann-date"><span>من تاريخ</span>
+                  <input id="annualStart" type="date" value="${start}" min="${new Date().toISOString().slice(0,10)}">
+                </label>
+                <div class="ann-arrow">›</div>
+                <div class="ann-date to"><span>إلى تاريخ</span>
+                  <b>${arDate(endDate)}</b>
+                </div>
+              </div>
+              <div class="ann-summary">
+                <span class="asum-k">القسط الشهري</span><span class="asum-v">${nfA(monthly)} <small>ر.س / شهر</small></span>
+                <span class="asum-dot"></span>
+                <span class="asum-k">إجمالي المدة</span><span class="asum-v big">${nfA(total)} <small>ر.س</small></span>
+              </div>
+            </div>`;
+          })()}
           <div class="quote-card fee-card inline">
             <div class="fee-row"><span>الإيجار السنوي</span><span>${nfA(aBase)} ر.س</span></div>
             <div class="fee-row"><span>رسوم خدمة سكن هوب (2.5%)</span><span>${nfA(aService)} ر.س</span></div>
@@ -1855,6 +1950,51 @@
         <div class="nights-pill" style="color:var(--text-dim);background:var(--bg-2)">💡 للتجربة: اكتب أي رمز ثم اضغط دخول</div>
         <button class="off-cta" style="background:var(--accent);margin-top:6px" data-act="verifyOtp">تحقق ودخول</button>
         <button class="breakdown-link" style="text-align:center;margin-top:14px" data-act="backToLogin">‹ تعديل رقم الجوال</button>
+      </div>
+      <div class="off-body signup-body" style="display:${state.authView==='signup'?'':'none'}">
+        <div class="off-section-title">اختر نوع حسابك</div>
+        <div class="d-sub" style="margin-bottom:14px">نحتاج لتخصيص التجربة حسب دورك. للناشر — ستُطلب رخصة الإعلان العقاري (REGA). للمكاتب والمسوّقين — تُضاف رخصة فال (FAL).</div>
+        <div class="role-picker">
+          ${[
+            ['seeker','🔎','باحث عن عقار','بحث · حجز · متابعة'],
+            ['owner','🏠','مالك عقار','نشر إعلان عقاري (يتطلب رخصة REGA)'],
+            ['office','🏢','مكتب عقاري','إدارة كاملة (يتطلب REGA + FAL)'],
+            ['marketer','📣','مسوّق عقاري','تسويق عقارات (يتطلب رخصة فال)'],
+          ].map(r=>`<button class="rp-card ${state.signupRole===r[0]?'on':''}" data-act="pickSignupRole" data-key="${r[0]}">
+            <span class="rp-check">✓</span>
+            <span class="rp-ic">${r[1]}</span>
+            <span class="rp-tx"><b>${r[2]}</b><small>${r[3]}</small></span>
+          </button>`).join('')}
+        </div>
+        ${(function(){
+          const r=state.signupRole;
+          const needsREGA = r==='owner' || r==='office';
+          const needsFAL  = r==='office' || r==='marketer';
+          if(!needsREGA && !needsFAL) return `<div class="verify-note ok">
+            <span class="vn-ic">✅</span>
+            <span class="vn-tx"><b>لا حاجة لرخصة</b><small>تستطيع البحث والحجز فوراً</small></span>
+          </div>`;
+          return `<div class="off-section-title">التحقق من الترخيص</div>
+          <div class="verify-note warn">
+            <span class="vn-ic">🛡️</span>
+            <span class="vn-tx"><b>التحقق من الرخصة قيد المراجعة</b><small>سيتم مطابقة رقم الرخصة مع الجهة المختصة. لن نُفعّل النشر قبل الاعتماد.</small></span>
+          </div>
+          ${needsREGA?`<div class="lic-field">
+            <label>رقم رخصة الإعلان العقاري (REGA) *</label>
+            <input id="signupLicREGA" type="text" inputmode="numeric" placeholder="7000000000" value="${esc(state.signupLicenseREGA)}">
+            <small>يمكن الحصول عليها من الهيئة العامة للعقار</small>
+          </div>`:''}
+          ${needsFAL?`<div class="lic-field">
+            <label>رقم رخصة فال (FAL) *</label>
+            <input id="signupLicFAL" type="text" inputmode="numeric" placeholder="1200000000" value="${esc(state.signupLicenseFAL)}">
+            <small>لمزاولة نشاط الوساطة العقارية</small>
+          </div>`:''}`;
+        })()}
+        <button class="off-cta signup-cta" data-act="submitSignupProfile">
+          <span>إتمام التسجيل</span>
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 6l-6 6 6 6"/></svg>
+        </button>
+        <div class="disclaimer" style="margin-top:16px"><span>ⓘ</span><span>البيانات محفوظة محلياً في هذه النسخة التوضيحية. التحقق الفعلي من الرخصة يتم عبر خادم سكن هوب.</span></div>
       </div>
       <div class="off-body acct" style="display:${acct?'':'none'}">
         <div class="acct-card">

@@ -5825,3 +5825,199 @@ img{ -webkit-user-drag:none; user-select:none; }
   transition:transform .12s ease;
 }
 .details-chip.primary:active{ transform:scale(.97); }
+
+/* ================================================================
+   Phase 2 Additions
+   ================================================================ */
+
+/* ---- Signup role picker + license fields ---- */
+.signup-body .role-picker{
+  display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:16px;
+}
+@media (max-width:520px){ .signup-body .role-picker{ grid-template-columns:1fr; } }
+.signup-body .rp-card{
+  position:relative; display:flex; flex-direction:column; align-items:flex-start; gap:6px;
+  padding:14px; border-radius:14px;
+  background:#F8FBFA; border:1.5px solid rgba(14,124,102,.12);
+  cursor:pointer; font-family:inherit; text-align:right;
+  transition:transform .12s ease, border-color .18s ease, background .18s ease;
+}
+.signup-body .rp-card:hover{ transform:translateY(-1px); border-color:rgba(14,124,102,.32); }
+.signup-body .rp-card.on{
+  background:linear-gradient(180deg,#E7FBF4 0%,#D8F5EC 100%);
+  border-color:#0E7C66;
+  box-shadow:0 4px 14px rgba(14,124,102,.14);
+}
+.signup-body .rp-check{
+  position:absolute; top:10px; left:10px;
+  width:22px; height:22px; border-radius:50%;
+  display:grid; place-items:center;
+  background:#0E7C66; color:#fff; font-size:12px; font-weight:900;
+  opacity:0; transform:scale(.7); transition:opacity .18s ease, transform .18s ease;
+}
+.signup-body .rp-card.on .rp-check{ opacity:1; transform:scale(1); }
+.signup-body .rp-ic{ font-size:28px; }
+.signup-body .rp-tx{ display:flex; flex-direction:column; gap:2px; }
+.signup-body .rp-tx b{ font-size:14px; font-weight:800; color:#0C1512; }
+.signup-body .rp-tx small{ font-size:11px; color:#5B6B65; }
+
+.signup-body .verify-note{
+  display:flex; align-items:flex-start; gap:10px;
+  padding:12px 14px; border-radius:12px; margin:0 0 14px;
+  border:1px solid transparent;
+}
+.signup-body .verify-note.warn{ background:#FEF7E6; border-color:#F2D48A; }
+.signup-body .verify-note.ok{ background:#E7FBF4; border-color:#B7E9D9; }
+.signup-body .verify-note .vn-ic{ font-size:22px; line-height:1; }
+.signup-body .verify-note .vn-tx{ display:flex; flex-direction:column; gap:2px; }
+.signup-body .verify-note .vn-tx b{ font-size:13px; font-weight:800; }
+.signup-body .verify-note .vn-tx small{ font-size:11px; color:#5B6B65; }
+
+.signup-body .lic-field{ display:flex; flex-direction:column; gap:6px; margin-bottom:12px; }
+.signup-body .lic-field label{ font-size:13px; font-weight:700; color:#0C1512; }
+.signup-body .lic-field input{
+  padding:12px 14px; border-radius:10px;
+  border:1.5px solid rgba(14,124,102,.18); background:#fff;
+  font-family:inherit; font-size:14px; direction:ltr;
+}
+.signup-body .lic-field input:focus{ outline:none; border-color:#0E7C66; box-shadow:0 0 0 3px rgba(14,124,102,.12); }
+.signup-body .lic-field small{ font-size:11px; color:#5B6B65; }
+
+.signup-body .signup-cta{
+  background:linear-gradient(180deg,#0E7C66 0%,#0A6B54 100%);
+  color:#fff; margin-top:6px;
+}
+
+/* ---- Host-offer compact chips + host-brief v2 ---- */
+.host-offer.compact .ho-chips{
+  display:flex; flex-wrap:wrap; gap:8px; margin-top:10px;
+}
+.host-offer.compact .ho-chip{
+  display:inline-flex; align-items:center; gap:6px;
+  padding:8px 12px; border-radius:999px;
+  background:#F8FBFA; border:1px solid rgba(14,124,102,.14);
+  font-size:12px; font-weight:700; color:#0C1512;
+  transition:background .18s ease, border-color .18s ease;
+}
+.host-offer.compact .ho-chip:hover{
+  background:#E7FBF4; border-color:#0E7C66;
+}
+.host-offer.compact .ho-em{ font-size:14px; line-height:1; }
+
+/* Host-brief v2 — softer background, avatar ring, bigger stats */
+.host-brief.v2{
+  background:linear-gradient(180deg,#FFFFFF 0%,#F5FAF8 100%);
+  border:1px solid rgba(14,124,102,.14);
+  border-radius:16px; padding:16px;
+  margin-top:14px; box-shadow:0 2px 10px rgba(14,124,102,.06);
+}
+.host-brief.v2 .hb-head{ display:flex; align-items:center; gap:12px; }
+.host-brief.v2 .hb-av{
+  width:52px; height:52px; border-radius:50%;
+  display:grid; place-items:center;
+  color:#fff; font-weight:900; font-size:18px;
+  box-shadow:0 0 0 3px rgba(14,124,102,.14);
+}
+.host-brief.v2 .hb-star{
+  margin-inline-start:auto;
+  background:#FEF7E6; padding:6px 10px; border-radius:999px;
+  font-weight:800; color:#8A6A1A;
+}
+.host-brief.v2 p{ margin:12px 0 12px; color:#3B4B47; line-height:1.7; font-size:13px; }
+.host-brief.v2 .hb-stats{
+  display:grid; grid-template-columns:repeat(3,1fr); gap:8px;
+}
+.host-brief.v2 .hb-stats span{
+  display:flex; flex-direction:column; gap:2px;
+  padding:10px; text-align:center; border-radius:10px;
+  background:rgba(14,124,102,.06); font-size:11px; color:#5B6B65;
+}
+.host-brief.v2 .hb-stats b{ font-size:15px; color:#0E7C66; font-weight:900; }
+
+/* ---- Annual rental picker ---- */
+.annual-picker{
+  background:linear-gradient(180deg,#F5FAF8 0%,#EFF7F3 100%);
+  border:1px solid rgba(14,124,102,.14);
+  border-radius:16px; padding:14px; margin-bottom:12px;
+  box-shadow:0 2px 10px rgba(14,124,102,.05);
+}
+.annual-picker .ann-months-row{
+  display:flex; flex-wrap:wrap; gap:8px; margin-bottom:14px;
+}
+.annual-picker .ann-chip{
+  padding:8px 14px; border-radius:999px;
+  background:#fff; border:1.5px solid rgba(14,124,102,.14);
+  font-family:inherit; font-size:13px; font-weight:700; color:#3B4B47;
+  cursor:pointer;
+  transition:background .18s ease, color .18s ease, border-color .18s ease, transform .12s ease;
+}
+.annual-picker .ann-chip:hover{ transform:translateY(-1px); border-color:#0E7C66; }
+.annual-picker .ann-chip.on{
+  background:linear-gradient(180deg,#0E7C66 0%,#0A6B54 100%);
+  color:#fff; border-color:#0A6B54;
+  box-shadow:0 3px 10px rgba(14,124,102,.24);
+}
+
+.annual-picker .ann-dates{
+  display:flex; align-items:center; gap:8px; margin-bottom:14px;
+}
+.annual-picker .ann-date{
+  flex:1; display:flex; flex-direction:column; gap:4px;
+  padding:10px 12px; border-radius:12px;
+  background:#fff; border:1.5px solid rgba(14,124,102,.14);
+}
+.annual-picker .ann-date span{ font-size:11px; font-weight:700; color:#5B6B65; }
+.annual-picker .ann-date input{
+  border:none; outline:none; background:transparent;
+  font-family:inherit; font-size:14px; font-weight:800; color:#0C1512;
+  padding:0; direction:ltr;
+}
+.annual-picker .ann-date b{ font-size:14px; font-weight:800; color:#0E7C66; }
+.annual-picker .ann-date.to{ background:#F8FBFA; }
+.annual-picker .ann-arrow{ font-size:22px; color:#0E7C66; font-weight:900; }
+
+.annual-picker .ann-summary{
+  display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+  padding-top:10px; border-top:1px dashed rgba(14,124,102,.16);
+}
+.annual-picker .asum-k{ font-size:11px; color:#5B6B65; font-weight:700; }
+.annual-picker .asum-v{ font-size:14px; font-weight:800; color:#0C1512; }
+.annual-picker .asum-v.big{ font-size:18px; color:#0E7C66; }
+.annual-picker .asum-v small{ font-size:11px; color:#5B6B65; font-weight:600; }
+.annual-picker .asum-dot{
+  width:4px; height:4px; border-radius:50%;
+  background:rgba(14,124,102,.28);
+}
+
+/* ---- Market Pulse — subtle overhaul (gradient bg, animated line marker) ---- */
+.mkt-hero2{
+  background:linear-gradient(155deg, #F0F9F6 0%, #E7FBF4 55%, #D8F5EC 100%) !important;
+  border:1px solid rgba(14,124,102,.14);
+  box-shadow:0 6px 22px rgba(14,124,102,.10);
+}
+.mkt-hero2 .mh2-val{
+  background:linear-gradient(90deg,#0E7C66 0%,#1FD9A6 100%);
+  -webkit-background-clip:text; background-clip:text; color:transparent;
+  font-weight:900;
+}
+.mkt-hero2 .mh2-chg.up{
+  background:linear-gradient(180deg,#1FD9A6 0%,#0E7C66 100%);
+  color:#fff; padding:6px 12px; border-radius:999px;
+  box-shadow:0 3px 10px rgba(14,124,102,.22);
+}
+.mkt-hero2 .mh2-forecast{
+  background:rgba(255,255,255,.72);
+  border:1px solid rgba(14,124,102,.14);
+  border-radius:12px; padding:10px 12px;
+  backdrop-filter:blur(6px);
+}
+.mkt-hero2 .mh2-periods .mkp.on{
+  background:#0E7C66; color:#fff; border-color:#0A6B54;
+  box-shadow:0 2px 8px rgba(14,124,102,.24);
+}
+.mkt-activity .mact{ border-radius:14px; }
+.mkt-activity .mact-chg.up{ color:#0A8963; }
+.mkt-activity .mact-chg.down{ color:#B23B2E; }
+
+/* Icon-driven gold accent for daily-mode surfaces on the market view */
+.mkt-item2.is-sale .mi-tag2.sale{ background:linear-gradient(180deg,#C7A252,#8A6A1A); }
