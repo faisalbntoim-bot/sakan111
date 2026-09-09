@@ -6744,3 +6744,285 @@ img{ -webkit-user-drag:none; user-select:none; }
   animation:thDrag 1.6s ease-in-out infinite;
 }
 @keyframes thDrag{ 0%,100%{ transform:translateX(-4px); } 50%{ transform:translateX(4px); } }
+
+/* ================================================================
+   Phase 6 — Riyadh mini-map, AI market pulse, admin block, gold refinement
+   ================================================================ */
+
+/* ---- Real Riyadh mini-map (favhoods) ---- */
+.favhoods-card.v2{
+  padding:0; overflow:hidden;
+}
+.favhoods-card.v2 .fh-map-real{
+  position:relative; padding:0;
+  border-radius:18px 18px 0 0; overflow:hidden;
+  border-bottom:1px solid rgba(14,124,102,.14);
+}
+.favhoods-card.v2 .fh-map-real svg{ display:block; }
+.favhoods-card.v2 .fhm-dot{ cursor:pointer; }
+.favhoods-card.v2 .fhm-dot .fhm-core{
+  fill:#FFFFFF; stroke:#0E7C66; stroke-width:2;
+  transition:r .22s ease, fill .22s ease;
+}
+.favhoods-card.v2 .fhm-dot:hover .fhm-core{
+  fill:#EEFBF5; stroke-width:2.5;
+}
+.favhoods-card.v2 .fhm-dot.on .fhm-core{
+  fill:#0E7C66; stroke:#0A6B54;
+  filter:drop-shadow(0 2px 6px rgba(14,124,102,.42));
+}
+.favhoods-card.v2 .fhm-dot .fhm-halo{
+  animation:fhmHalo 2s ease-in-out infinite;
+}
+@keyframes fhmHalo{ 0%,100%{ opacity:.4; r:14; } 50%{ opacity:0; r:22; } }
+.favhoods-card.v2 .fhm-lbl{
+  font-family:inherit; font-size:9px; font-weight:800;
+  fill:#0A6B54; paint-order:stroke;
+  stroke:rgba(255,255,255,.9); stroke-width:3;
+}
+.favhoods-card.v2 .fhm-dot.on .fhm-lbl{ fill:#0A6B54; font-size:10px; }
+.favhoods-card.v2 .fhm-compass{
+  font-family:inherit; font-size:9px; font-weight:800;
+  fill:rgba(14,124,102,.6);
+}
+.favhoods-card.v2 .fh-map-hint{
+  display:flex; align-items:center; gap:8px;
+  padding:10px 14px;
+  background:rgba(14,124,102,.06);
+  border-bottom:1px solid rgba(14,124,102,.10);
+  font-size:12px; font-weight:700; color:#0A6B54;
+}
+.favhoods-card.v2 .fh-map-hint .fmh-count{
+  margin-inline-start:auto;
+  padding:3px 10px; border-radius:999px;
+  background:#0E7C66; color:#fff; font-size:11px;
+}
+.favhoods-card.v2 .fh-chips,
+.favhoods-card.v2 .fh-summary{ padding-inline:14px; }
+.favhoods-card.v2 .fh-chips{ padding-block:14px; }
+.favhoods-card.v2 .fh-summary{ padding-block:14px 16px; border-top:1px dashed rgba(14,124,102,.16); }
+
+/* ---- AI market pulse card ---- */
+.off-section-title .sec-title-ic{
+  display:inline-block; margin-inline-end:4px; font-size:16px;
+  vertical-align:-2px;
+}
+.ai-market-card{
+  position:relative; padding:14px;
+  border-radius:18px;
+  background:
+    radial-gradient(circle at top right, rgba(31,217,166,.10), transparent 40%),
+    linear-gradient(180deg,#FFFFFF 0%, #F0F9F6 100%);
+  border:1px solid rgba(14,124,102,.14);
+  box-shadow:0 4px 18px rgba(14,124,102,.08);
+  margin-bottom:16px;
+  overflow:hidden;
+}
+.ai-market-card::before{
+  content:""; position:absolute; inset:-20px;
+  background:linear-gradient(120deg, transparent 40%, rgba(31,217,166,.06) 50%, transparent 60%);
+  animation:aiShimmer 4s linear infinite;
+  pointer-events:none;
+}
+@keyframes aiShimmer{ from{ transform:translateX(-30%); } to{ transform:translateX(30%); } }
+
+.ai-market-card .amc-badge{
+  display:inline-flex; align-items:center; gap:6px;
+  padding:5px 10px; margin-bottom:12px;
+  background:linear-gradient(180deg,#0E7C66 0%,#0A6B54 100%);
+  color:#fff; font-size:11px; font-weight:800;
+  border-radius:999px; letter-spacing:.2px;
+}
+.ai-market-card .amc-badge .amc-b-dot{
+  width:6px; height:6px; border-radius:50%;
+  background:#1FD9A6; box-shadow:0 0 0 3px rgba(31,217,166,.35);
+  animation:aiPulse 1.6s ease-in-out infinite;
+}
+@keyframes aiPulse{ 0%,100%{ transform:scale(1); } 50%{ transform:scale(1.4); opacity:.5; } }
+
+.ai-market-card .ai-hoods-grid{
+  display:grid; grid-template-columns:1fr 1fr; gap:8px;
+  position:relative; z-index:1;
+}
+@media (max-width:520px){ .ai-market-card .ai-hoods-grid{ grid-template-columns:1fr; } }
+.ai-market-card .ai-hood{
+  padding:10px 12px; border-radius:12px;
+  background:rgba(255,255,255,.85);
+  border:1px solid rgba(14,124,102,.10);
+  backdrop-filter:blur(4px);
+  transition:transform .12s ease, border-color .18s ease;
+}
+.ai-market-card .ai-hood:hover{ transform:translateY(-1px); border-color:#0E7C66; }
+.ai-market-card .ai-hood.hot{ border-color:rgba(224,90,50,.32); }
+.ai-market-card .ai-hood.cool{ border-color:rgba(90,110,150,.28); }
+.ai-market-card .ai-hood.ok{ border-color:rgba(14,124,102,.24); }
+.ai-market-card .ah-top{ display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+.ai-market-card .ah-name{ flex:1; display:flex; flex-direction:column; gap:2px; }
+.ai-market-card .ah-name b{ font-size:13px; font-weight:800; color:#0C1512; }
+.ai-market-card .ah-name small{ font-size:10px; color:#5B6B65; }
+.ai-market-card .ah-badge{
+  padding:3px 8px; border-radius:999px;
+  font-size:10px; font-weight:800;
+}
+.ai-market-card .ai-hood.hot .ah-badge{ background:#FFE8DF; color:#B23B1E; }
+.ai-market-card .ai-hood.cool .ah-badge{ background:#E8EFF7; color:#3B5B85; }
+.ai-market-card .ai-hood.ok .ah-badge{ background:#E7FBF4; color:#0A6B54; }
+.ai-market-card .ah-bars{ display:flex; flex-direction:column; gap:6px; }
+.ai-market-card .ah-bar{ display:flex; align-items:center; gap:8px; font-size:11px; }
+.ai-market-card .ah-bar small{ min-width:56px; color:#5B6B65; font-weight:700; }
+.ai-market-card .ah-track{ flex:1; height:6px; border-radius:99px; background:rgba(14,124,102,.10); overflow:hidden; }
+.ai-market-card .ah-track span{
+  display:block; height:100%;
+  background:linear-gradient(90deg,#0E7C66 0%,#1FD9A6 100%);
+  border-radius:99px;
+}
+.ai-market-card .ah-bar b{ font-size:11px; font-weight:800; color:#0A6B54; min-width:34px; text-align:end; }
+.ai-market-card .ah-trend{ font-size:11px; font-weight:800; padding:2px 8px; border-radius:99px; }
+.ai-market-card .ah-trend.up{ background:rgba(31,178,126,.14); color:#0A8963; }
+.ai-market-card .ah-trend.down{ background:rgba(178,59,46,.14); color:#B23B1E; }
+.ai-market-card .amc-foot{
+  display:flex; align-items:flex-start; gap:6px;
+  margin-top:12px; padding-top:10px;
+  border-top:1px dashed rgba(14,124,102,.16);
+  font-size:10px; color:#5B6B65;
+}
+
+/* ---- Admin block v2 ---- */
+.admin-block-v2{
+  margin-top:20px; padding:12px;
+  background:linear-gradient(180deg,#0C4C3A 0%,#083629 100%);
+  border-radius:18px;
+  box-shadow:0 6px 22px rgba(12,76,58,.28);
+  overflow:hidden;
+  position:relative;
+}
+.admin-block-v2::before{
+  content:""; position:absolute; inset:-40%;
+  background:radial-gradient(circle at 30% 30%, rgba(31,217,166,.15), transparent 55%);
+  pointer-events:none;
+}
+.admin-block-v2 .admin-block-head{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:0 4px 10px;
+  position:relative;
+}
+.admin-block-v2 .abh-badge{
+  display:inline-flex; align-items:center; gap:6px;
+  padding:5px 12px; border-radius:999px;
+  background:rgba(31,217,166,.18); color:#D8F5EC;
+  font-size:11px; font-weight:800; letter-spacing:.3px;
+  border:1px solid rgba(31,217,166,.28);
+}
+.admin-block-v2 .abh-tag{
+  font-size:10px; font-weight:800; color:rgba(216,245,236,.7);
+  letter-spacing:.4px;
+}
+.admin-block-v2 .admin-login-btn.v2{
+  display:flex; align-items:center; gap:12px; width:100%;
+  padding:14px 16px; border-radius:14px;
+  background:linear-gradient(180deg, rgba(255,255,255,.10) 0%, rgba(255,255,255,.04) 100%);
+  border:1px solid rgba(31,217,166,.32);
+  color:#fff; font-family:inherit; text-align:right; cursor:pointer;
+  transition:transform .12s ease, box-shadow .18s ease, border-color .18s ease;
+  position:relative;
+}
+.admin-block-v2 .admin-login-btn.v2:hover{
+  transform:translateY(-1px); border-color:#1FD9A6;
+  box-shadow:0 6px 18px rgba(31,217,166,.24);
+}
+.admin-block-v2 .alb-ic.v2{
+  width:42px; height:42px; border-radius:12px;
+  display:inline-grid; place-items:center;
+  background:rgba(31,217,166,.14); color:#1FD9A6; flex-shrink:0;
+}
+.admin-block-v2 .alb-tx.v2{ flex:1; display:flex; flex-direction:column; gap:2px; }
+.admin-block-v2 .alb-tx.v2 b{ font-size:14px; font-weight:900; color:#fff; }
+.admin-block-v2 .alb-tx.v2 small{ font-size:11px; color:rgba(216,245,236,.72); }
+.admin-block-v2 .alb-go.v2{ color:#1FD9A6; }
+.admin-block-v2 .admin-block-note{
+  padding:8px 4px 2px; margin-top:8px;
+  font-size:10px; color:rgba(216,245,236,.62);
+  text-align:center; position:relative;
+}
+
+/* ---- Book sheet v2 — calendar interactivity fixes + gold harmony ---- */
+.book-sheet-v2 .bsv2-cal .cal-day{
+  cursor:pointer;
+  padding:8px 0;
+  border-radius:10px;
+  transition:background .15s ease, color .15s ease, transform .12s ease;
+  user-select:none;
+}
+.book-sheet-v2 .bsv2-cal .cal-day.pad{ cursor:default; }
+.book-sheet-v2 .bsv2-cal .cal-day:not(.pad):not(.booked):hover{
+  background:rgba(14,124,102,.10); transform:scale(1.05);
+}
+.book-sheet-v2 .bsv2-cal .cal-day.booked{
+  color:#B5B5B5; text-decoration:line-through; cursor:not-allowed;
+  background:rgba(0,0,0,.04);
+}
+.book-sheet-v2 .bsv2-cal .cal-day.sel{
+  background:linear-gradient(180deg,#B58A2C 0%,#8A6A1A 100%);
+  color:#fff; font-weight:900;
+  box-shadow:0 3px 10px rgba(181,138,44,.32);
+  transform:scale(1.05);
+}
+.book-sheet-v2 .bsv2-cal .cal-day.range{
+  background:linear-gradient(180deg, rgba(181,138,44,.14) 0%, rgba(199,162,82,.20) 100%);
+  color:#8A6A1A; font-weight:800;
+  border-radius:0;
+}
+.book-sheet-v2 .bsv2-cal .cal-day.sel + .range{ border-start-start-radius:10px; border-end-start-radius:10px; }
+.book-sheet-v2 .bsv2-cal .cal-head{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:2px 4px 10px;
+  font-size:13px; font-weight:800; color:#0C1512;
+}
+.book-sheet-v2 .bsv2-cal .cal-head .cal-legend{
+  font-size:10px; font-weight:700; color:#5B6B65;
+}
+.book-sheet-v2 .bsv2-cal .cal-weekdays{
+  display:grid; grid-template-columns:repeat(7,1fr);
+  gap:2px; margin-bottom:6px;
+}
+.book-sheet-v2 .bsv2-cal .cal-wd{
+  text-align:center; font-size:10px; font-weight:800;
+  color:#5B6B65; padding:6px 0;
+}
+.book-sheet-v2 .bsv2-cal .cal-grid{
+  display:grid; grid-template-columns:repeat(7,1fr);
+  gap:2px;
+  font-size:13px; font-weight:700; text-align:center;
+}
+
+/* Gold-daily accent — refined to sit harmoniously beside the green.
+   The gold now blends with the green tokens via a soft cream ground
+   instead of jumping out. */
+.book-strip{
+  background:linear-gradient(180deg, #FBFBF6 0%, #F5F7F1 100%);
+  border-color:rgba(181,138,44,.22);
+}
+.book-strip .bs-cta{
+  background:linear-gradient(180deg,#0E7C66 0%,#0A6B54 100%);
+  box-shadow:0 4px 14px rgba(14,124,102,.32),
+             0 0 0 3px rgba(181,138,44,.08);
+}
+.mode-toggle.solo button.on.active.daily-glow{
+  background:linear-gradient(180deg,#C7A252 0%,#8A6A1A 100%);
+  box-shadow:0 4px 14px rgba(181,138,44,.30);
+  border:1px solid rgba(181,138,44,.42);
+}
+
+/* When daily is active, hide the annual toggle button entirely (was
+   already handled by the .solo mode-toggle, but reinforce it here for
+   any legacy call site). */
+.mode-toggle .mode-alt[data-act="setModeAnnual"],
+.mode-toggle .mode-alt[data-act="setModeDaily"]{
+  transition:opacity .18s ease;
+}
+
+/* ---- Book strip small mobile spacing fix ---- */
+@media (max-width:520px){
+  .book-strip{ flex-direction:column; align-items:stretch; text-align:center; gap:10px; }
+  .book-strip .bs-cta{ width:100%; justify-content:center; }
+}

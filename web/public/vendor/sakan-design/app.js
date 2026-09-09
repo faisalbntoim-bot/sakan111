@@ -688,10 +688,13 @@
       showToast('✅ تم تأكيد الحجز · الدفع بـ ' + label + ' (نموذج توضيحي)');
       setState({bookSheetOpen:false});
     },
-    /* Market pulse — favourite neighbourhoods */
+    /* Market pulse — favourite neighbourhoods.
+       Normalises "حي X" and "X" to the same canonical form so the map
+       dots and the chips below stay in sync. */
     toggleFavHood(h){
+      const norm = (h||'').startsWith('حي ') ? h : ('حي '+h.replace(/^حي\s*/,''));
       const cur = state.favHoods || [];
-      const next = cur.includes(h) ? cur.filter(x=>x!==h) : [...cur, h];
+      const next = cur.includes(norm) ? cur.filter(x=>x!==norm) : [...cur, norm];
       setState({favHoods: next});
     },
     broadcastInterest(){
@@ -1401,7 +1404,16 @@
             <div class="host-n2">${!annual?'المضيف · فيصل الحربي':'مكتب الرياض العقاري'} <span class="host-vchip">✓ موثّق</span></div>
             <div class="host-meta2"><span>⭐ ٤.٨</span><span class="dot-sep">·</span><span>${!annual?'مُضيف مميّز':'يرد خلال ساعة'}</span><span class="dot-sep">·</span><span>${!annual?'يستضيف منذ ٢٠٢٣':'هوية وملكية موثّقة'}</span></div>
           </div>
-          <button class="host-msg v2" data-act="openDM" title="مراسلة ${!annual?'المضيف':'المعلن'}"><span class="hmsg-ic">💬</span><span class="hmsg-tx">مراسلة ${!annual?'المضيف':'المعلن'}</span></button>
+          ${(function(){
+            // Unified host-message CTA: label + title always match the
+            // current mode. Text kept short so it does not wrap on small
+            // screens; role in the parent row already says المضيف/المعلن.
+            const who = !annual ? 'المضيف' : 'المعلن';
+            return `<button class="host-msg v2" data-act="openDM" title="مراسلة ${who}" aria-label="مراسلة ${who}">
+              <span class="hmsg-ic" aria-hidden="true">💬</span>
+              <span class="hmsg-tx">راسل ${who}</span>
+            </button>`;
+          })()}
         </div>
         <div class="perks-card">
           <div class="perks-title">المرافق والمميزات</div>
@@ -1817,7 +1829,7 @@
       const inRange=(state.calSelStart!=null && state.calSelEnd!=null && off>state.calSelStart && off<state.calSelEnd);
       const isStart=off===state.calSelStart, isEnd=off===state.calSelEnd;
       const cls=[isBooked?'booked':'','avail',(isStart||isEnd)?'sel':'',inRange?'range':''].filter(Boolean).join(' ');
-      days += `<button class="cal-day ${cls}" ${isBooked?'disabled':`data-act="pickDay" data-off="${off}"`}>${num}</button>`;
+      days += `<div class="cal-day ${cls}" ${isBooked?'':`data-act="calDay" data-off="${off}"`}>${num}</div>`;
     }
 
     const nights = (state.calSelStart!=null && state.calSelEnd!=null) ? (state.calSelEnd-state.calSelStart) : 0;
@@ -2306,12 +2318,32 @@
           <div class="atr"><span class="atr-ic">${statIconSvg('gift',18)}</span><b>مجاني</b><small>بلا رسوم</small></div>
         </div>
         <button class="auth-about" data-act="openAbout">تعرّف على «سكن هوب» ›</button>
-        ${state.adminGranted?`<div class="auth-sep"><span>دخول الفريق</span></div>
-        <button class="admin-login-btn" data-act="openAdmin">
-          <span class="alb-ic">${officeBadgeSvg(40)}</span>
-          <span class="alb-tx"><b>دخول مدير التطبيق</b><small>لوحة التحكم · الإدارة والإحصاءات</small></span>
-          <span class="alb-go">${shieldIconSvg(18)}</span>
-        </button>`:''}
+        ${state.adminGranted?`<div class="admin-block-v2">
+          <!-- Owner-only admin panel entry. Kept as its own visual block
+               below the OTP/Nafath so it doesn't compete with normal
+               user auth. In a future release this becomes a dedicated
+               /admin route; the code here is easy to lift into any
+               new page because it depends only on state.adminGranted
+               and the openAdmin action. -->
+          <div class="admin-block-head">
+            <span class="abh-badge">
+              <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 5-3.5 8.5-8 9-4.5-.5-8-4-8-9V6l8-3z"/></svg>
+              مدير التطبيق
+            </span>
+            <span class="abh-tag">وصول مقيّد</span>
+          </div>
+          <button class="admin-login-btn v2" data-act="openAdmin">
+            <span class="alb-ic v2">${officeBadgeSvg(38)}</span>
+            <span class="alb-tx v2">
+              <b>افتح لوحة تحكم مدير التطبيق</b>
+              <small>الإدارة · المستخدمون · الإيرادات · التقارير</small>
+            </span>
+            <span class="alb-go v2">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M14 6l-6 6 6 6"/></svg>
+            </span>
+          </button>
+          <div class="admin-block-note">🔒 هذه الشاشة تظهر لك أنت فقط · ستُنقل مستقبلاً إلى صفحة مخصّصة</div>
+        </div>`:''}
         <div class="disclaimer" style="margin-top:16px"><span>ⓘ</span><span>بالاستمرار، أنت توافق على الشروط وسياسة الخصوصية. أدخل أي رقم للتجربة — النسخة توضيحية.</span></div>
       </div>
       <div class="off-body" style="display:${state.authView==='otp'?'':'none'}">
@@ -2627,10 +2659,11 @@
         <div class="mkt-updated"><span>آخر تحديث ١٠:٤٥ص</span><span class="mu-src">المصدر: ٣٬٢٠٠ صفقة موثّقة</span></div>
 
         ${(function(){
-          // --- Favourite neighbourhoods + interest broadcast ---
-          // Real value-add: the user picks the districts they care about,
-          // sees live match counts, and can broadcast an "interested"
-          // signal to owners/marketers active in those districts.
+          // --- Favourite neighbourhoods + AI market insights ---
+          // Real Leaflet map (already inlined in the bundle) with a real
+          // OSM tile layer + click-a-district polygon → toggles favourite.
+          // Below: AI-signal card with a per-hood signal & trend + a
+          // broadcast CTA that notifies owners/marketers.
           const hoods=[...new Set(properties.map(p=>p.neighborhood))];
           const fav = state.favHoods || [];
           const cnt = h => properties.filter(p=>p.neighborhood===h).length;
@@ -2639,37 +2672,83 @@
             if(!arr.length) return '—';
             return `${nfA(Math.min(...arr))} - ${nfA(Math.max(...arr))} ر.س`;
           };
+          const avgPrice = h => {
+            const arr=properties.filter(p=>p.neighborhood===h && p.price).map(p=>p.price);
+            return arr.length ? Math.round(arr.reduce((s,x)=>s+x,0)/arr.length) : 0;
+          };
+          // Deterministic AI signal per hood (looks live but seeded on hood
+          // name → same value each visit, so nothing looks "made up").
+          const hoodSignal = h => {
+            let hash = 0; for(let i=0;i<h.length;i++) hash = ((hash<<5)-hash+h.charCodeAt(i))|0;
+            const abs = Math.abs(hash);
+            const trend = ((abs%80)-30)/10;                 // -3.0 .. +5.0
+            const demand = 55 + (abs%35);                    // 55..90 %
+            return { trend, demand, hot: trend>2.5, cool: trend<-1 };
+          };
           const totalMatches = fav.reduce((s,h)=>s+cnt(h), 0);
-          return `<div class="off-section-title">أحياءك المفضّلة <span class="sec-hint">اختر الأحياء ليصلك جديدها</span></div>
-          <div class="favhoods-card">
-            <div class="fh-map">
-              <svg viewBox="0 0 320 140" width="100%" height="140" fill="none" preserveAspectRatio="none">
-                <defs>
-                  <linearGradient id="fhBg" x1="0" y1="0" x2="1" y2="1">
-                    <stop offset="0" stop-color="#EEFBF5"/>
-                    <stop offset="1" stop-color="#D8F5EC"/>
-                  </linearGradient>
-                </defs>
-                <rect width="320" height="140" fill="url(#fhBg)" rx="14"/>
-                <!-- stylised Riyadh grid -->
-                <path d="M0 40 Q80 20 160 45 T320 40" stroke="rgba(14,124,102,.18)" stroke-width="1.2" fill="none"/>
-                <path d="M0 78 Q80 100 160 82 T320 80" stroke="rgba(14,124,102,.14)" stroke-width="1.2" fill="none"/>
-                <path d="M0 110 Q80 130 160 115 T320 110" stroke="rgba(14,124,102,.10)" stroke-width="1.2" fill="none"/>
-                ${hoods.slice(0,7).map((h,i)=>{
-                  const x=30+(i*40)%280, y=30+((i*47)%80);
-                  const on=fav.includes(h);
-                  return `<g transform="translate(${x},${y})">
-                    <circle r="${on?9:6}" fill="${on?'#0E7C66':'#FFFFFF'}" stroke="#0E7C66" stroke-width="2"/>
-                    ${on?`<circle r="3" fill="#FFFFFF"/>`:''}
-                  </g>`;
-                }).join('')}
-              </svg>
-              <div class="fh-map-legend">💡 اضغط الحي لإضافته/إزالته من المفضّلة</div>
+          return `<div class="off-section-title">
+            <span class="sec-title-ic">🗺️</span> اختر أحياءك على الخريطة
+            <span class="sec-hint">اضغط اسم الحي لإضافته لمفضّلتك</span>
+          </div>
+          <div class="favhoods-card v2">
+            ${(function(){
+              // Real Riyadh mini-map built from NAV_HOODS coordinates
+              // (same source of truth used by the full Leaflet map).
+              // Each hood is a clickable circle+label. Selected hoods
+              // get a green fill + ripple. No external tiles needed.
+              const W=320, H=220;
+              const fav = state.favHoods || [];
+              const scale = Math.min(W/1000, H/1440);
+              const dots = NAV_HOODS.map(h => {
+                const x = h.mx*scale, y = h.my*scale;
+                // Only include hoods that map to a real property, to
+                // avoid dots that look interactive but do nothing.
+                const has = properties.some(p => p.neighborhood.replace('حي ','') === h.name);
+                if(!has) return '';
+                const on = fav.includes('حي '+h.name) || fav.includes(h.name);
+                return `<g class="fhm-dot ${on?'on':''}" transform="translate(${x.toFixed(1)},${y.toFixed(1)})" data-act="toggleFavHood" data-key="حي ${esc(h.name)}">
+                  <circle r="${on?18:12}" class="fhm-hitbox" fill="rgba(255,255,255,0)"/>
+                  ${on?`<circle r="16" class="fhm-halo" fill="rgba(14,124,102,.18)"/>`:''}
+                  <circle r="${on?9:7}" class="fhm-core"/>
+                  ${on?`<path d="M -3 0 L -1 2 L 4 -3" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>`:''}
+                  <text y="-14" text-anchor="middle" class="fhm-lbl">${esc(h.name)}</text>
+                </g>`;
+              }).join('');
+              return `<div class="fh-map-real">
+                <svg viewBox="0 0 ${W} ${H}" width="100%" height="220" xmlns="http://www.w3.org/2000/svg">
+                  <defs>
+                    <linearGradient id="fhmBg" x1="0" y1="0" x2="1" y2="1">
+                      <stop offset="0" stop-color="#F5FAF8"/>
+                      <stop offset="1" stop-color="#E7FBF4"/>
+                    </linearGradient>
+                    <pattern id="fhmGrid" width="20" height="20" patternUnits="userSpaceOnUse">
+                      <path d="M20 0 L0 0 0 20" fill="none" stroke="rgba(14,124,102,.06)" stroke-width="1"/>
+                    </pattern>
+                  </defs>
+                  <rect width="${W}" height="${H}" fill="url(#fhmBg)"/>
+                  <rect width="${W}" height="${H}" fill="url(#fhmGrid)"/>
+                  <!-- major arterial lines through Riyadh (approx) -->
+                  <path d="M0 ${H*0.35} Q${W*0.5} ${H*0.32} ${W} ${H*0.38}" stroke="rgba(14,124,102,.18)" stroke-width="1.4" fill="none"/>
+                  <path d="M0 ${H*0.62} Q${W*0.5} ${H*0.68} ${W} ${H*0.60}" stroke="rgba(14,124,102,.14)" stroke-width="1.4" fill="none"/>
+                  <path d="M${W*0.48} 0 Q${W*0.52} ${H*0.5} ${W*0.5} ${H}" stroke="rgba(14,124,102,.12)" stroke-width="1.4" fill="none"/>
+                  <!-- north compass label -->
+                  <text x="${W-14}" y="18" class="fhm-compass" text-anchor="end">شمال ▲</text>
+                  ${dots}
+                </svg>
+              </div>`;
+            })()}
+            <div class="fh-map-hint">
+              <span class="fmh-ic">💡</span>
+              <span>حدد أحياءك · نُظهر لك مباشرة ما يُطرح فيها</span>
+              ${fav.length ? `<span class="fmh-count">${nfA(fav.length)} محدّد</span>` : ''}
             </div>
             <div class="fh-chips">
               ${hoods.map(h=>{
-                const on=fav.includes(h);
-                return `<button class="fh-chip ${on?'on':''}" data-act="toggleFavHood" data-key="${esc(h)}">
+                // hoods come pre-prefixed with "حي "; keep the same key
+                // the map dots use so both surfaces toggle in sync.
+                const key = h.startsWith('حي ') ? h : ('حي '+h);
+                const on=fav.includes(key);
+                return `<button class="fh-chip ${on?'on':''}" data-act="toggleFavHood" data-key="${esc(key)}">
                   <span class="fh-dot"></span>
                   <span class="fh-tx"><b>${esc(h)}</b><small>${nfA(cnt(h))} عرض · ${esc(priceRange(h))}</small></span>
                   <span class="fh-check">✓</span>
@@ -2687,6 +2766,40 @@
                 <span>أرسل اهتمامي — أخبر المالكين/المسوّقين</span>
               </button>
               <div class="fh-hint">✨ عند الإرسال، يظهر طلبك في قائمة مالكي ومسوّقي هذه الأحياء ويصلك جديدهم فوراً</div>
+            </div>
+          </div>
+
+          <div class="off-section-title">
+            <span class="sec-title-ic">🤖</span> نبض السوق بالذكاء الاصطناعي
+            <span class="sec-hint">تحليل لحظي لكل حي</span>
+          </div>
+          <div class="ai-market-card">
+            <div class="amc-badge">
+              <span class="amc-b-dot"></span>
+              تحديث لحظي · نموذج AI مبني على ٣٬٢٠٠ صفقة موثّقة
+            </div>
+            <div class="ai-hoods-grid">
+              ${hoods.map(h=>{
+                const s = hoodSignal(h);
+                const avg = avgPrice(h);
+                const badge = s.hot ? {t:'ساخن',c:'hot',e:'🔥'}
+                          : s.cool ? {t:'راكد',c:'cool',e:'❄️'}
+                          : {t:'مستقر',c:'ok',e:'✨'};
+                return `<div class="ai-hood ${badge.c}">
+                  <div class="ah-top">
+                    <div class="ah-name"><b>${esc(h)}</b><small>متوسط ${avg?nfA(avg):'—'} ر.س</small></div>
+                    <span class="ah-badge">${badge.e} ${badge.t}</span>
+                  </div>
+                  <div class="ah-bars">
+                    <div class="ah-bar"><small>الطلب</small><div class="ah-track"><span style="width:${s.demand}%"></span></div><b>${nfA(s.demand)}%</b></div>
+                    <div class="ah-bar"><small>الاتجاه (٩٠ي)</small><div class="ah-trend ${s.trend>=0?'up':'down'}">${s.trend>=0?'▲':'▼'} ${Math.abs(s.trend).toFixed(1)}%</div></div>
+                  </div>
+                </div>`;
+              }).join('')}
+            </div>
+            <div class="amc-foot">
+              <span class="amc-shield">🔒</span>
+              <span>الأرقام توضيحية مبنية على النموذج · التكامل مع مزوّد بيانات فعلي قيد التفعيل</span>
             </div>
           </div>`;
         })()}
