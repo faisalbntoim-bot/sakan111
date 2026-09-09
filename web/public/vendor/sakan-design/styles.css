@@ -7026,3 +7026,406 @@ img{ -webkit-user-drag:none; user-select:none; }
   .book-strip{ flex-direction:column; align-items:stretch; text-align:center; gap:10px; }
   .book-strip .bs-cta{ width:100%; justify-content:center; }
 }
+
+/* ==========================================================================
+   Phase 7 — Airbnb-style accordion booking sheet (v3),
+   "نبض العقار والصفقات" subscriptions + deals-30 card,
+   admin-block-at-bottom refinement, and softer color harmony pass.
+   All classes below are additive; no existing selectors were altered.
+   ========================================================================== */
+
+/* ---- book-sheet-v3 : single-page accordion (Airbnb-style) --------------- */
+.book-sheet-v3{
+  padding-bottom:20px;
+}
+.book-sheet-v3 .bsv3-body-wrap{
+  display:flex; flex-direction:column;
+  gap:12px;
+  padding:6px 16px 16px;
+  max-height:calc(85vh - 60px);
+  overflow-y:auto;
+  -webkit-overflow-scrolling:touch;
+}
+.book-sheet-v3 .bsv2-prop{
+  margin:6px 0 4px;
+}
+
+.book-sheet-v3 .bsv3-section{
+  background:#fff;
+  border:1px solid rgba(14,124,102,.14);
+  border-radius:16px;
+  overflow:hidden;
+  transition:border-color .2s ease, box-shadow .2s ease, background .2s ease;
+}
+.book-sheet-v3 .bsv3-section.expanded{
+  border-color:rgba(14,124,102,.34);
+  box-shadow:0 6px 22px rgba(14,124,102,.10);
+}
+
+.book-sheet-v3 .bsv3-hd{
+  width:100%;
+  display:flex; align-items:center; gap:12px;
+  background:transparent; border:0;
+  padding:14px 14px;
+  cursor:pointer;
+  text-align:start;
+  font-family:inherit;
+  transition:background .15s ease;
+}
+.book-sheet-v3 .bsv3-hd:hover{
+  background:rgba(14,124,102,.04);
+}
+.book-sheet-v3 .bsv3-ic{
+  flex-shrink:0;
+  width:38px; height:38px;
+  border-radius:12px;
+  display:flex; align-items:center; justify-content:center;
+  background:linear-gradient(150deg, rgba(14,124,102,.10), rgba(199,162,82,.08));
+  color:#0E7C66;
+}
+.book-sheet-v3 .bsv3-section.expanded .bsv3-ic{
+  background:linear-gradient(150deg, rgba(14,124,102,.18), rgba(199,162,82,.14));
+}
+.book-sheet-v3 .bsv3-tx{
+  flex:1; min-width:0;
+  display:flex; flex-direction:column; gap:2px;
+}
+.book-sheet-v3 .bsv3-k{
+  font-size:14px; font-weight:800; color:#0C1512;
+}
+.book-sheet-v3 .bsv3-v{
+  font-size:12px; font-weight:600; color:#5B6B65;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.book-sheet-v3 .bsv3-total{
+  color:#0E7C66; font-weight:900;
+}
+.book-sheet-v3 .bsv3-chev{
+  flex-shrink:0;
+  font-size:16px; color:#8A968F;
+  transition:transform .2s ease, color .2s ease;
+}
+.book-sheet-v3 .bsv3-chev.up{
+  transform:rotate(180deg);
+  color:#0E7C66;
+}
+
+.book-sheet-v3 .bsv3-body{
+  max-height:0;
+  overflow:hidden;
+  padding:0 14px;
+  transition:max-height .3s ease, padding .3s ease;
+}
+.book-sheet-v3 .bsv3-body.open{
+  max-height:1800px;
+  padding:0 14px 14px;
+}
+
+.book-sheet-v3 .bsv3-next{
+  width:100%;
+  margin-top:12px;
+  padding:12px 14px;
+  border:0; border-radius:12px;
+  background:linear-gradient(180deg,#0E7C66 0%,#0A6B54 100%);
+  color:#fff; font-family:inherit; font-weight:800; font-size:13px;
+  display:flex; align-items:center; justify-content:center; gap:6px;
+  cursor:pointer;
+  box-shadow:0 3px 10px rgba(14,124,102,.22);
+  transition:transform .12s ease, box-shadow .2s ease;
+}
+.book-sheet-v3 .bsv3-next:hover{
+  transform:translateY(-1px);
+  box-shadow:0 5px 16px rgba(14,124,102,.28);
+}
+.book-sheet-v3 .bsv3-confirm{
+  width:100%;
+  margin-top:14px;
+  padding:14px;
+  border:0; border-radius:14px;
+  background:linear-gradient(180deg,#0E7C66 0%,#0A6B54 100%);
+  color:#fff; font-family:inherit; font-weight:900; font-size:14px;
+  cursor:pointer;
+  box-shadow:0 6px 20px rgba(14,124,102,.30);
+  transition:transform .12s ease, box-shadow .2s ease;
+}
+.book-sheet-v3 .bsv3-confirm:hover{
+  transform:translateY(-1px);
+  box-shadow:0 8px 26px rgba(14,124,102,.36);
+}
+
+/* Reuse bsv2 inner styles inside bsv3 bodies (calendar, guests, breakdown, pay). */
+.book-sheet-v3 .bsv2-cal-summary,
+.book-sheet-v3 .bsv2-cal,
+.book-sheet-v3 .guests-list,
+.book-sheet-v3 .bsv2-breakdown,
+.book-sheet-v3 .bsv2-cancel,
+.book-sheet-v3 .bsv2-pay-title,
+.book-sheet-v3 .bsv2-pay-methods,
+.book-sheet-v3 .bsv2-note{
+  margin-top:6px;
+}
+
+/* Calendar controls inside bsv3 mirror bsv2 exactly. */
+.book-sheet-v3 .bsv2-cal .cal-day{
+  min-height:38px; display:flex; align-items:center; justify-content:center;
+  cursor:pointer; padding:8px 0; border-radius:10px;
+  transition:background .15s ease, color .15s ease, transform .12s ease;
+  user-select:none;
+}
+.book-sheet-v3 .bsv2-cal .cal-day.pad{ cursor:default; }
+.book-sheet-v3 .bsv2-cal .cal-day:not(.pad):not(.booked):hover{
+  background:rgba(14,124,102,.10); transform:scale(1.05);
+}
+.book-sheet-v3 .bsv2-cal .cal-day.booked{
+  color:#B5B5B5; text-decoration:line-through; cursor:not-allowed;
+  background:rgba(0,0,0,.04);
+}
+.book-sheet-v3 .bsv2-cal .cal-day.sel{
+  background:linear-gradient(180deg,#B58A2C 0%,#8A6A1A 100%);
+  color:#fff; font-weight:900;
+  box-shadow:0 3px 10px rgba(181,138,44,.32);
+  transform:scale(1.05);
+}
+.book-sheet-v3 .bsv2-cal .cal-day.range{
+  background:linear-gradient(180deg, rgba(181,138,44,.14) 0%, rgba(199,162,82,.20) 100%);
+  color:#8A6A1A; font-weight:800;
+  border-radius:0;
+}
+
+/* ---- Admin block at bottom (auth screen) -------------------------------- */
+.admin-block-v2.bottom{
+  margin-top:20px;
+  margin-bottom:6px;
+  opacity:.94;
+}
+.admin-block-v2.bottom:hover{ opacity:1; }
+
+/* ---- Subscriptions strip ------------------------------------------------- */
+.market-pulse .subs-strip{
+  display:grid;
+  grid-template-columns:repeat(3, 1fr);
+  gap:10px;
+  margin-top:10px;
+}
+.market-pulse .subs-plan{
+  position:relative;
+  background:linear-gradient(180deg,#FFFFFF 0%,#F7FAF6 100%);
+  border:1px solid rgba(14,124,102,.16);
+  border-radius:14px;
+  padding:12px 10px 10px;
+  display:flex; flex-direction:column; align-items:center; gap:4px;
+  text-align:center;
+  transition:transform .12s ease, box-shadow .2s ease, border-color .2s ease;
+}
+.market-pulse .subs-plan:hover{
+  transform:translateY(-2px);
+  box-shadow:0 6px 18px rgba(14,124,102,.10);
+  border-color:rgba(14,124,102,.28);
+}
+.market-pulse .subs-plan.featured{
+  background:linear-gradient(180deg,#FDF9EE 0%,#F5EBD1 100%);
+  border-color:rgba(181,138,44,.32);
+  box-shadow:0 6px 18px rgba(181,138,44,.14);
+}
+.market-pulse .subs-badge{
+  position:absolute;
+  top:-8px; left:50%; transform:translateX(-50%);
+  background:linear-gradient(180deg,#C7A252 0%,#8A6A1A 100%);
+  color:#fff;
+  font-size:9.5px; font-weight:800;
+  padding:3px 8px; border-radius:8px;
+  letter-spacing:.5px;
+  box-shadow:0 2px 6px rgba(181,138,44,.28);
+}
+.market-pulse .subs-name{
+  font-size:12px; font-weight:800; color:#0C1512;
+  letter-spacing:.4px; text-transform:uppercase;
+}
+.market-pulse .subs-price{
+  display:flex; align-items:baseline; gap:3px;
+  color:#0E7C66;
+}
+.market-pulse .subs-price b{ font-size:22px; font-weight:900; }
+.market-pulse .subs-price small{ font-size:10px; color:#5B6B65; font-weight:600; }
+.market-pulse .subs-sub{
+  font-size:11px; color:#5B6B65; font-weight:600;
+  min-height:28px;
+}
+.market-pulse .subs-cta{
+  width:100%;
+  margin-top:4px;
+  padding:8px;
+  border:0; border-radius:10px;
+  background:linear-gradient(180deg,#0E7C66 0%,#0A6B54 100%);
+  color:#fff; font-family:inherit; font-weight:800; font-size:11.5px;
+  cursor:pointer;
+  transition:transform .12s ease, box-shadow .2s ease;
+}
+.market-pulse .subs-plan.featured .subs-cta{
+  background:linear-gradient(180deg,#B58A2C 0%,#8A6A1A 100%);
+  box-shadow:0 3px 10px rgba(181,138,44,.28);
+}
+.market-pulse .subs-cta:hover{
+  transform:translateY(-1px);
+}
+
+/* ---- Deals-30 card (نبض العقار والصفقات) --------------------------------- */
+.market-pulse .deals-30-card{
+  background:linear-gradient(180deg,#FFFFFF 0%,#F5FAF6 100%);
+  border:1px solid rgba(14,124,102,.16);
+  border-radius:16px;
+  padding:14px;
+  margin-top:12px;
+}
+.market-pulse .d30-hero{
+  display:flex; align-items:center; justify-content:space-between;
+  padding-bottom:12px;
+  border-bottom:1px dashed rgba(14,124,102,.16);
+}
+.market-pulse .d30-total{
+  display:flex; flex-direction:column; gap:2px;
+}
+.market-pulse .d30-total small{
+  font-size:10.5px; color:#5B6B65; font-weight:700;
+  letter-spacing:.6px; text-transform:uppercase;
+}
+.market-pulse .d30-total b{
+  font-size:26px; font-weight:900; color:#0E7C66;
+  line-height:1;
+}
+.market-pulse .d30-trend{
+  font-size:11px; font-weight:800;
+  padding:4px 10px; border-radius:9px;
+}
+.market-pulse .d30-trend.up{
+  background:rgba(14,124,102,.10); color:#0A6B54;
+}
+.market-pulse .d30-trend.down{
+  background:rgba(201,80,80,.10); color:#B04141;
+}
+
+.market-pulse .d30-grid{
+  display:grid;
+  grid-template-columns:repeat(3, 1fr);
+  gap:8px;
+  margin-top:12px;
+}
+.market-pulse .d30-tile{
+  position:relative;
+  background:#fff;
+  border:1px solid rgba(14,124,102,.10);
+  border-radius:12px;
+  padding:10px 8px;
+  display:flex; flex-direction:column; align-items:center; gap:4px;
+  text-align:center;
+}
+.market-pulse .d30-tile.sale{ border-color:rgba(181,138,44,.22); }
+.market-pulse .d30-tile.rent-y{ border-color:rgba(14,124,102,.22); }
+.market-pulse .d30-tile.rent-d{ border-color:rgba(94,131,110,.24); }
+.market-pulse .d30-t-ic{
+  font-size:16px;
+}
+.market-pulse .d30-t-tx{
+  display:flex; flex-direction:column; gap:1px;
+}
+.market-pulse .d30-t-tx b{
+  font-size:16px; font-weight:900; color:#0C1512;
+  line-height:1;
+}
+.market-pulse .d30-t-tx small{
+  font-size:10px; color:#5B6B65; font-weight:700;
+}
+.market-pulse .d30-t-chg{
+  font-size:9.5px; font-weight:800;
+  padding:2px 7px; border-radius:7px;
+}
+.market-pulse .d30-t-chg.up{ background:rgba(14,124,102,.12); color:#0A6B54; }
+.market-pulse .d30-t-chg.down{ background:rgba(201,80,80,.12); color:#B04141; }
+
+.market-pulse .d30-timeline{
+  margin-top:14px;
+}
+.market-pulse .d30-tl-head{
+  display:flex; align-items:center; justify-content:space-between;
+  font-size:11px; color:#5B6B65; font-weight:700;
+  margin-bottom:6px;
+}
+.market-pulse .d30-tl-head b{ color:#0C1512; font-weight:800; }
+.market-pulse .d30-bars{
+  display:flex; align-items:flex-end; justify-content:space-between;
+  gap:4px;
+  height:80px;
+  padding:6px 4px 24px;
+  background:linear-gradient(180deg, rgba(14,124,102,.03), transparent 70%);
+  border-radius:10px;
+  position:relative;
+}
+.market-pulse .d30-bar{
+  flex:1;
+  min-width:0;
+  background:linear-gradient(180deg,#5AB69C 0%,#0E7C66 100%);
+  border-radius:6px 6px 3px 3px;
+  position:relative;
+  display:flex; align-items:flex-start; justify-content:center;
+  min-height:14%;
+  transition:transform .15s ease, filter .15s ease;
+}
+.market-pulse .d30-bar:hover{
+  transform:translateY(-2px);
+  filter:brightness(1.05);
+}
+.market-pulse .d30-bar.max{
+  background:linear-gradient(180deg,#C7A252 0%,#8A6A1A 100%);
+  box-shadow:0 2px 8px rgba(181,138,44,.24);
+}
+.market-pulse .d30-b-n{
+  position:absolute;
+  top:-16px; left:50%; transform:translateX(-50%);
+  font-size:9.5px; font-weight:800; color:#0C1512;
+}
+.market-pulse .d30-b-day{
+  position:absolute;
+  bottom:-20px; left:50%; transform:translateX(-50%);
+  font-size:10px; font-weight:700; color:#5B6B65;
+}
+
+.market-pulse .d30-note{
+  display:flex; align-items:center; gap:8px;
+  margin-top:12px;
+  padding:8px 10px;
+  background:rgba(14,124,102,.05);
+  border:1px dashed rgba(14,124,102,.20);
+  border-radius:10px;
+  font-size:11px; color:#0A6B54; font-weight:600;
+}
+.market-pulse .d30-n-ic{ font-size:13px; }
+
+/* ---- Color harmony refinement pass -------------------------------------- */
+/* Slightly warmer paper + a calmer accent on hero elements. These override
+   only the specific tokens used most across the page — not the palette
+   variables in :root — so nothing downstream changes shape. */
+.hero .hero-title{
+  color:#0A3E33;
+}
+.market-pulse{
+  background:linear-gradient(180deg,#FBFDF9 0%,#F4F7F1 100%);
+}
+.book-strip .bs-price b{ color:#0A6B54; }
+
+/* Small-screen tweaks for subscriptions and d30 grid */
+@media (max-width:520px){
+  .market-pulse .subs-strip{
+    grid-template-columns:1fr;
+    gap:8px;
+  }
+  .market-pulse .d30-grid{
+    grid-template-columns:1fr;
+  }
+  .market-pulse .d30-bars{
+    height:66px;
+  }
+  .book-sheet-v3 .bsv3-body-wrap{
+    padding:6px 12px 14px;
+    max-height:calc(88vh - 60px);
+  }
+}

@@ -378,8 +378,12 @@
     guestsAdults:2, guestsChildren:0, guestsInfants:0, guestsPets:0,
     guestsSheetOpen:false,
     priceBreakdownOpen:false,
-    /* New stepped booking sheet (dates → guests → pay) */
-    bookSheetOpen:false, bookStep:'dates', bookPayMethod:'apple',
+    /* New booking sheet — single scrollable page with 3 accordions
+       (dates / guests / pay). Airbnb-style progressive disclosure. */
+    bookSheetOpen:false, bookPayMethod:'apple',
+    bookExpDates:true, bookExpGuests:false, bookExpPay:false,
+    /* Legacy stepped field, kept so older render paths don't error. */
+    bookStep:'dates',
     /* Market pulse — favourite neighbourhoods + interest broadcast */
     favHoods:[], interestBroadcasts:0,
     editOpen:false, editIdx:null, editMode:'edit',
@@ -674,10 +678,24 @@
     },
     openGuests(){ setState({guestsSheetOpen:true}); },
     closeGuests(){ setState({guestsSheetOpen:false}); },
-    /* New stepped booking sheet actions */
-    openBookSheet(){ setState({bookSheetOpen:true, bookStep:'dates'}); },
+    /* Booking sheet — open resets all sections to just-dates expanded. */
+    openBookSheet(){ setState({bookSheetOpen:true, bookExpDates:true, bookExpGuests:false, bookExpPay:false}); },
     closeBookSheet(){ setState({bookSheetOpen:false}); },
-    goBookStep(k){ setState({bookStep:k}); },
+    /* Accordion — toggle a section, collapse the others. Auto-advance:
+       when nights become >0, guests opens; when guests set, pay opens. */
+    toggleBookSection(k){
+      const map = {dates:'bookExpDates', guests:'bookExpGuests', pay:'bookExpPay'};
+      const key = map[k]; if(!key) return;
+      const cur = state[key];
+      // If we're expanding a section, collapse the others.
+      if(!cur){ setState({bookExpDates:false, bookExpGuests:false, bookExpPay:false, [key]:true}); }
+      else { setState({[key]:false}); }
+    },
+    goBookStep(k){
+      const map = {dates:'bookExpDates', guests:'bookExpGuests', pay:'bookExpPay'};
+      const key = map[k]; if(!key) return;
+      setState({bookExpDates:false, bookExpGuests:false, bookExpPay:false, [key]:true});
+    },
     setPayMethod(k){ setState({bookPayMethod:k}); },
     confirmBookPay(){
       const p=properties[state.detailIdx]||properties[0];
@@ -687,6 +705,10 @@
       const label = method==='apple'?'Apple Pay':method==='mada'?'مدى':'بطاقة ائتمان';
       showToast('✅ تم تأكيد الحجز · الدفع بـ ' + label + ' (نموذج توضيحي)');
       setState({bookSheetOpen:false});
+    },
+    subToast(k){
+      const map={FREE:'مجاني', PRO:'محترف', OFFICE:'مكاتب'};
+      showToast('💎 خطة ' + (map[k]||k) + ' — التفعيل عبر خادم الاشتراك (توضيحي).');
     },
     /* Market pulse — favourite neighbourhoods.
        Normalises "حي X" and "X" to the same canonical form so the map
@@ -1849,10 +1871,6 @@
     const arr = state.calSelStart!=null ? f(state.calSelStart) : 'اختر';
     const dep = state.calSelEnd!=null ? f(state.calSelEnd) : 'اختر';
 
-    const step = state.bookStep || 'dates';
-    const dot = k => `<span class="bsv2-dot ${k===step?'on':''} ${(k==='dates'&&nights>0)||(k==='guests'&&(step==='guests'||step==='pay'))||(k==='pay'&&step==='pay')?'done':''}"></span>`;
-    const stepTitles = {dates:'اختر التواريخ', guests:'كم شخصاً؟', pay:'راجع وادفع'};
-
     const grow = (k, title, sub) => {
       const val = state['guests'+k.charAt(0).toUpperCase()+k.slice(1)] || 0;
       const floor = k==='adults' ? 1 : 0;
@@ -1870,16 +1888,25 @@
     const payMethod = state.bookPayMethod || 'apple';
     const payRow = (k, node) => `<button class="pmv2 ${payMethod===k?'on':''}" data-act="setPayMethod" data-key="${k}">${node}</button>`;
 
-    // Sheet header — brand + close.
+    // Airbnb-style single-page accordion:
+    //   - one card at a time expands, others show a compact summary
+    //   - each header carries: icon · title · value · chevron
+    //   - clicking any header toggles that section
+    const expDates  = state.bookExpDates !== false;
+    const expGuests = state.bookExpGuests === true;
+    const expPay    = state.bookExpPay    === true;
+
+    const dateIc   = "<svg viewBox='0 0 24 24' width='20' height='20' fill='none' stroke='currentColor' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='4' width='18' height='18' rx='2.5'/><path d='M16 2v4M8 2v4M3 10h18'/></svg>";
+    const guestsIc = "<svg viewBox='0 0 24 24' width='20' height='20' fill='none' stroke='currentColor' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><path d='M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2'/><circle cx='9' cy='7' r='4'/><path d='M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75'/></svg>";
+    const priceIc  = "<svg viewBox='0 0 24 24' width='20' height='20' fill='none' stroke='currentColor' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='9'/><path d='M12 6v12M8.5 9.5C8.5 8.12 9.62 7 11 7h2c1.38 0 2.5 1.12 2.5 2.5S14.38 12 13 12h-2c-1.38 0-2.5 1.12-2.5 2.5S9.62 17 11 17h2c1.38 0 2.5-1.12 2.5-2.5'/></svg>";
+
+    // Header
     const header = `<div class="bsv2-head">
-      <div class="bsv2-title">
-        <b>${esc(stepTitles[step])}</b>
-        <div class="bsv2-dots">${dot('dates')}${dot('guests')}${dot('pay')}</div>
-      </div>
+      <div class="bsv2-title"><b>احجز إقامتك</b></div>
       <button class="close" data-act="closeBookSheet">✕</button>
     </div>`;
 
-    // Property mini-summary top-of-sheet
+    // Property mini-summary
     const propMini = `<div class="bsv2-prop">
       <div class="bsv2-prop-thumb" style="background-image:url('${galleryFor(p, state.detailIdx)[0].src}')"></div>
       <div class="bsv2-prop-tx">
@@ -1888,9 +1915,16 @@
       </div>
     </div>`;
 
-    // Step 1: dates
-    const datesPanel = `<div class="bsv2-panel ${step==='dates'?'on':''}">
-      ${propMini}
+    // --- Section 1: DATES ---
+    const datesHeader = `<button class="bsv3-hd" data-act="toggleBookSection" data-key="dates" aria-expanded="${expDates}">
+      <span class="bsv3-ic">${dateIc}</span>
+      <div class="bsv3-tx">
+        <span class="bsv3-k">التواريخ</span>
+        <span class="bsv3-v">${nights>0?`${esc(arr)} → ${esc(dep)} · ${nfA(nights)} ليالٍ`:'اضغط لاختيار الوصول والمغادرة'}</span>
+      </div>
+      <span class="bsv3-chev ${expDates?'up':''}">▾</span>
+    </button>`;
+    const datesBody = `<div class="bsv3-body ${expDates?'open':''}">
       <div class="bsv2-cal-summary">
         <div class="bcs-cell"><small>الوصول</small><b>${esc(arr)}</b></div>
         <div class="bcs-arrow">←</div>
@@ -1900,17 +1934,24 @@
         <div class="cal-head"><span>${calMonthNames[today.getMonth()]} ${today.getFullYear()}</span><span class="cal-legend"><i class="dotL g"></i> متاح <i class="dotL gray" style="margin-inline-start:8px"></i> محجوز</span></div>
         <div class="cal-weekdays">${weekHead}</div>
         <div class="cal-grid">${pad}${days}</div>
-        <div class="nights-pill ${nights>0?'on':''}">${nights>0?`${moonIcon(12)} ${nights} ليالٍ`:`${moonIcon(12)} اختر الوصول ثم المغادرة`}</div>
+        <div class="nights-pill ${nights>0?'on':''}">${nights>0?`${moonIcon(12)} ${nights} ليالٍ محدَّدة`:`${moonIcon(12)} اختر الوصول ثم المغادرة`}</div>
       </div>
-      <button class="bsv2-next ${nights>0?'':'disabled'}" data-act="goBookStep" data-key="guests" ${nights>0?'':'disabled'}>
+      ${nights>0?`<button class="bsv3-next" data-act="goBookStep" data-key="guests">
         متابعة إلى الضيوف
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M14 6l-6 6 6 6"/></svg>
-      </button>
+      </button>`:''}
     </div>`;
 
-    // Step 2: guests
-    const guestsPanel = `<div class="bsv2-panel ${step==='guests'?'on':''}">
-      ${propMini}
+    // --- Section 2: GUESTS ---
+    const guestsHeader = `<button class="bsv3-hd" data-act="toggleBookSection" data-key="guests" aria-expanded="${expGuests}">
+      <span class="bsv3-ic">${guestsIc}</span>
+      <div class="bsv3-tx">
+        <span class="bsv3-k">الضيوف</span>
+        <span class="bsv3-v">${esc(guestsSummary)}</span>
+      </div>
+      <span class="bsv3-chev ${expGuests?'up':''}">▾</span>
+    </button>`;
+    const guestsBody = `<div class="bsv3-body ${expGuests?'open':''}">
       <div class="bsv2-note">من سيقيم معك؟ نستخدم هذا لعرض شروط المضيف المناسبة.</div>
       <div class="guests-list">
         ${grow('adults', 'البالغون', '١٣ سنة فأكثر')}
@@ -1918,27 +1959,23 @@
         ${grow('infants', 'الرضّع', 'أقل من ٢ سنة')}
         ${grow('pets', 'الحيوانات الأليفة', 'يمكن رفض بعض الأنواع')}
       </div>
-      <div class="bsv2-btns">
-        <button class="bsv2-back" data-act="goBookStep" data-key="dates">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M10 6l6 6-6 6"/></svg>
-          رجوع
-        </button>
-        <button class="bsv2-next" data-act="goBookStep" data-key="pay">
-          راجع وادفع
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M14 6l-6 6 6 6"/></svg>
-        </button>
-      </div>
+      <button class="bsv3-next" data-act="goBookStep" data-key="pay">
+        متابعة إلى السعر والدفع
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M14 6l-6 6 6 6"/></svg>
+      </button>
     </div>`;
 
-    // Step 3: pay
-    const payPanel = `<div class="bsv2-panel ${step==='pay'?'on':''}">
-      ${propMini}
-      <div class="bsv2-review">
-        <div class="brv-row"><span>📅 التواريخ</span><b>${esc(arr)} → ${esc(dep)}</b></div>
-        <div class="brv-row"><span>👥 الضيوف</span><b>${esc(guestsSummary)}</b></div>
-        <div class="brv-row"><span>🌙 الليالي</span><b>${nfA(nights)} ليالٍ</b></div>
+    // --- Section 3: PRICE + PAY ---
+    const priceHeader = `<button class="bsv3-hd" data-act="toggleBookSection" data-key="pay" aria-expanded="${expPay}">
+      <span class="bsv3-ic">${priceIc}</span>
+      <div class="bsv3-tx">
+        <span class="bsv3-k">السعر الإجمالي</span>
+        <span class="bsv3-v">${nights>0?`<b class="bsv3-total">${nfA(dTotal)}</b> ر.س`:'حدّد التواريخ لعرض السعر'}</span>
       </div>
-      <div class="bsv2-breakdown">
+      <span class="bsv3-chev ${expPay?'up':''}">▾</span>
+    </button>`;
+    const payBody = `<div class="bsv3-body ${expPay?'open':''}">
+      ${nights>0?`<div class="bsv2-breakdown">
         <div class="pb-row"><span>${nfA(nights)} × ${nfA(p.dailyRate)} ر.س</span><span>${nfA(staySubtotal)} ر.س</span></div>
         <div class="pb-row"><span>رسوم التنظيف</span><span>${nfA(p.cleaning)} ر.س</span></div>
         <div class="pb-row"><span>رسوم خدمة سكن هوب (12%)</span><span>${nfA(dService)} ر.س</span></div>
@@ -1952,26 +1989,30 @@
         ${payRow('mada', `<span class="mada-lbl">مدى</span>`)}
         ${payRow('card', `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 9.5h19M6 15h4"/></svg><span>بطاقة ائتمان</span>`)}
       </div>
-      <div class="bsv2-btns">
-        <button class="bsv2-back" data-act="goBookStep" data-key="guests">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M10 6l6 6-6 6"/></svg>
-          رجوع
-        </button>
-        <button class="bsv2-confirm" data-act="confirmBookPay">
-          ✓ تأكيد الحجز · ادفع ${nfA(dTotal)} ر.س
-        </button>
-      </div>
+      <button class="bsv3-confirm" data-act="confirmBookPay">
+        ✓ تأكيد الحجز · ادفع ${nfA(dTotal)} ر.س
+      </button>`:`<div class="bsv2-note">لن يظهر السعر الإجمالي وطرق الدفع حتى تختار تواريخ الإقامة.</div>`}
     </div>`;
 
     return `
       <div class="sheet-overlay above ${state.bookSheetOpen?'open':''}" data-act="closeBookSheet"></div>
-      <div class="sheet above book-sheet-v2 ${state.bookSheetOpen?'open':''}">
+      <div class="sheet above book-sheet-v3 ${state.bookSheetOpen?'open':''}">
         <div class="sheet-handle"></div>
         ${header}
-        <div class="bsv2-body">
-          ${datesPanel}
-          ${guestsPanel}
-          ${payPanel}
+        <div class="bsv3-body-wrap">
+          ${propMini}
+          <div class="bsv3-section ${expDates?'expanded':''}">
+            ${datesHeader}
+            ${datesBody}
+          </div>
+          <div class="bsv3-section ${expGuests?'expanded':''}">
+            ${guestsHeader}
+            ${guestsBody}
+          </div>
+          <div class="bsv3-section ${expPay?'expanded':''}">
+            ${priceHeader}
+            ${payBody}
+          </div>
         </div>
       </div>`;
   }
@@ -2318,13 +2359,13 @@
           <div class="atr"><span class="atr-ic">${statIconSvg('gift',18)}</span><b>مجاني</b><small>بلا رسوم</small></div>
         </div>
         <button class="auth-about" data-act="openAbout">تعرّف على «سكن هوب» ›</button>
-        ${state.adminGranted?`<div class="admin-block-v2">
-          <!-- Owner-only admin panel entry. Kept as its own visual block
-               below the OTP/Nafath so it doesn't compete with normal
-               user auth. In a future release this becomes a dedicated
-               /admin route; the code here is easy to lift into any
-               new page because it depends only on state.adminGranted
-               and the openAdmin action. -->
+        <div class="disclaimer" style="margin-top:16px"><span>ⓘ</span><span>بالاستمرار، أنت توافق على الشروط وسياسة الخصوصية. أدخل أي رقم للتجربة — النسخة توضيحية.</span></div>
+        ${state.adminGranted?`<!-- Owner-only admin block — moved BELOW the disclaimer so
+             normal users complete their sign-in without visual noise,
+             and the operator finds their gate at the very bottom of
+             the screen. Depends only on state.adminGranted + openAdmin,
+             so relocating to a dedicated /admin page is a one-line cut. -->
+        <div class="admin-block-v2 bottom">
           <div class="admin-block-head">
             <span class="abh-badge">
               <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 5-3.5 8.5-8 9-4.5-.5-8-4-8-9V6l8-3z"/></svg>
@@ -2344,7 +2385,6 @@
           </button>
           <div class="admin-block-note">🔒 هذه الشاشة تظهر لك أنت فقط · ستُنقل مستقبلاً إلى صفحة مخصّصة</div>
         </div>`:''}
-        <div class="disclaimer" style="margin-top:16px"><span>ⓘ</span><span>بالاستمرار، أنت توافق على الشروط وسياسة الخصوصية. أدخل أي رقم للتجربة — النسخة توضيحية.</span></div>
       </div>
       <div class="off-body" style="display:${state.authView==='otp'?'':'none'}">
         <div class="off-section-title">رمز التحقق</div>
@@ -2643,7 +2683,7 @@
       <div class="sheet-overlay above ${state.marketOpen?'open':''}" data-act="closeMarket"></div>
       <div class="sheet above market-sheet ${state.marketOpen?'open':''}">
         <div class="sheet-handle"></div>
-        <div class="sheet-head"><h3><span class="mp-ic">${pulseIconSvg(16)}</span> نبض السوق</h3><button class="close" data-act="closeMarket">✕</button></div>
+        <div class="sheet-head"><h3><span class="mp-ic">${pulseIconSvg(16)}</span> نبض العقار والصفقات</h3><button class="close" data-act="closeMarket">✕</button></div>
         <div class="mkt-hero2 has-sky">
           <div class="mh2-sky">${kafdHeroSvg()}</div>
           <div class="mh2-top">
@@ -2770,7 +2810,77 @@
           </div>
 
           <div class="off-section-title">
-            <span class="sec-title-ic">🤖</span> نبض السوق بالذكاء الاصطناعي
+            <span class="sec-title-ic">💎</span> اشتراكات سكن هوب
+            <span class="sec-hint">اختر الخطة المناسبة لك</span>
+          </div>
+          <div class="subs-strip">
+            ${[
+              {code:'FREE',   name:'مجاني',   price:'0',   sub:'إعلان واحد · إحصائيات أساسية', badge:''},
+              {code:'PRO',    name:'محترف',   price:'49',  sub:'حتى ١٠ إعلانات · تقارير مفصّلة', badge:'الأكثر شيوعاً'},
+              {code:'OFFICE', name:'مكاتب',   price:'299', sub:'إعلانات غير محدودة · فريق ومكتب', badge:''},
+            ].map(pl=>`<div class="subs-plan ${pl.badge?'featured':''}">
+              ${pl.badge?`<span class="subs-badge">${esc(pl.badge)}</span>`:''}
+              <div class="subs-name">${esc(pl.name)}</div>
+              <div class="subs-price"><b>${esc(pl.price)}</b><small>ر.س/شهر</small></div>
+              <div class="subs-sub">${esc(pl.sub)}</div>
+              <button class="subs-cta" data-act="subToast" data-key="${esc(pl.code)}">${pl.code==='FREE'?'ابدأ الآن':'اختر الخطة'}</button>
+            </div>`).join('')}
+          </div>
+
+          <div class="off-section-title">
+            <span class="sec-title-ic">📈</span> صفقات ٣٠ يوم
+            <span class="sec-hint">أرقام موثّقة من دفتر سكن هوب</span>
+          </div>
+          <div class="deals-30-card">
+            <div class="d30-hero">
+              <div class="d30-total">
+                <small>إجمالي الصفقات المبرمة</small>
+                <b>١٬٢٧٤</b>
+              </div>
+              <div class="d30-trend up">▲ ٨٫٤٪ عن الشهر الماضي</div>
+            </div>
+            <div class="d30-grid">
+              <div class="d30-tile sale">
+                <div class="d30-t-ic">🏷️</div>
+                <div class="d30-t-tx"><b>٤٢٣</b><small>عقد بيع</small></div>
+                <div class="d30-t-chg up">▲ ٥٪</div>
+              </div>
+              <div class="d30-tile rent-y">
+                <div class="d30-t-ic">🔑</div>
+                <div class="d30-t-tx"><b>٥١٨</b><small>إيجار سنوي</small></div>
+                <div class="d30-t-chg up">▲ ١٢٪</div>
+              </div>
+              <div class="d30-tile rent-d">
+                <div class="d30-t-ic">🌙</div>
+                <div class="d30-t-tx"><b>٣٣٣</b><small>إيجار يومي</small></div>
+                <div class="d30-t-chg down">▼ ٢٪</div>
+              </div>
+            </div>
+            <div class="d30-timeline">
+              <div class="d30-tl-head">
+                <b>خط الزمن — آخر ٧ أيام</b>
+                <small>عقود تُبرَم يومياً</small>
+              </div>
+              <div class="d30-bars">
+                ${[38,52,44,61,49,58,72].map((n,i)=>{
+                  const dayNames=['السبت','الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة'];
+                  const h = Math.max(18, Math.round(n*1.05));
+                  const isMax = n===Math.max(38,52,44,61,49,58,72);
+                  return `<div class="d30-bar ${isMax?'max':''}" style="height:${h}%">
+                    <span class="d30-b-n">${nfA(n)}</span>
+                    <span class="d30-b-day">${esc(dayNames[i])}</span>
+                  </div>`;
+                }).join('')}
+              </div>
+            </div>
+            <div class="d30-note">
+              <span class="d30-n-ic">🔒</span>
+              <span>كل صفقة تظهر بعد توثيقها إلكترونياً وتحويل الضمان — بدون بيانات شخصية</span>
+            </div>
+          </div>
+
+          <div class="off-section-title">
+            <span class="sec-title-ic">🤖</span> نبض العقار والصفقات بالذكاء الاصطناعي
             <span class="sec-hint">تحليل لحظي لكل حي</span>
           </div>
           <div class="ai-market-card">
@@ -2804,7 +2914,7 @@
           </div>`;
         })()}
 
-        <div class="off-section-title">نبض السوق اليوم</div>
+        <div class="off-section-title">نبض العقار والصفقات اليوم</div>
         <div class="mkt-activity">
           <div class="mact rented"><span class="mact-ic">${statIconSvg('key')}</span><b>١٤٢</b><small>تأجّر اليوم</small><span class="mact-chg up">▲ ٨٪</span></div>
           <div class="mact listed"><span class="mact-ic">${statIconSvg('home')}</span><b>٨٦</b><small>معروض جديد</small><span class="mact-chg up">▲ ٥٪</span></div>
@@ -3218,7 +3328,7 @@
 
   /* ---- صفحة «من نحن» ---- */
   function aboutHtml(){
-    const feats=[['🎬','#2E9E77','تصفّح تفاعلي','عرض العقارات بأسلوب فيديو حيّ'],['🔔','#4C7A9C','تنبيهات الأسعار','نعلمك فور توفّر عقار مطابق'],['🤖','#2E9E77','مساعد سكن هوب','مرشد ذكي للسكن والمدينة'],['🔒','#0C4C3A','دفع مضمون','ضمان ودرع ضد الاحتيال'],['📊','#C7A252','نبض السوق','مؤشرات أسعار الرياض'],['🏢','#B5744E','بوابة المكاتب','لوحة تحكم للمكاتب']];
+    const feats=[['🎬','#2E9E77','تصفّح تفاعلي','عرض العقارات بأسلوب فيديو حيّ'],['🔔','#4C7A9C','تنبيهات الأسعار','نعلمك فور توفّر عقار مطابق'],['🤖','#2E9E77','مساعد سكن هوب','مرشد ذكي للسكن والمدينة'],['🔒','#0C4C3A','دفع مضمون','ضمان ودرع ضد الاحتيال'],['📊','#C7A252','نبض العقار والصفقات','مؤشرات أسعار الرياض'],['🏢','#B5744E','بوابة المكاتب','لوحة تحكم للمكاتب']];
     return `<div class="offices about-page ${state.aboutOpen?'open':''}" style="z-index:101">
       <div class="about-hero has-sky">
         <div class="about-sky">${riyadhSkylineSvg()}</div>
@@ -3583,7 +3693,7 @@
         <div class="off-section-title tools-t">أدوات مكتبك <span class="sec-hint">وصول سريع</span></div>
         <div class="dash-tools">
           <button class="dtool" data-act="addListing"><span class="dt-ic">${dashIcon('edit',22)}</span><span>أضف إعلان</span></button>
-          <button class="dtool" data-act="openMarket"><span class="dt-ic">${pulseIconSvg(22)}</span><span>نبض السوق</span></button>
+          <button class="dtool" data-act="openMarket"><span class="dt-ic">${pulseIconSvg(22)}</span><span>نبض العقار والصفقات</span></button>
           <button class="dtool" data-act="openDeals"><span class="dt-ic">${dashIcon('market',22)}</span><span>السوق العقاري</span></button>
           <button class="dtool" data-act="openArCapture"><span class="dt-ic">${dashIcon('camera',22)}</span><span>تصوير AR</span></button>
         </div>
@@ -3864,7 +3974,7 @@
           <div class="top-actions">
             <div class="tb-cluster">
               <button class="icon-btn ${state.mapOpen?'active':''}" data-act="toggleMap" title="الخريطة">${state.mapOpen?'📋':`<span style="display:inline-flex">${mapSearchIconSvg()}</span>`}</button>
-              <button class="icon-btn" data-act="openMarket" title="نبض السوق"><span style="display:inline-flex">${chartIconSvg()}</span></button>
+              <button class="icon-btn" data-act="openMarket" title="نبض العقار والصفقات"><span style="display:inline-flex">${chartIconSvg()}</span></button>
               <button class="icon-btn" data-act="openOffices" title="للمكاتب العقارية"><span style="display:inline-flex">${officeIconSvg()}</span></button>
               <button class="icon-btn" data-act="openAuth" title="حسابي"><span style="display:inline-flex">${userIconSvg()}</span></button>
             </div>
@@ -4063,7 +4173,7 @@
           <div class="ds-logo">${logoMark(60)}</div>
           <h1>سكن <span>هوب</span></h1>
           <p>منصّة عقارك بأسلوب جديد — تصفّح العقارات، افحص السعر بالذكاء الاصطناعي، واحجز بأمان في مكان واحد.</p>
-          <div class="ds-feats"><span>🎬 تصفّح تفاعلي</span><span>🧠 فحص أسعار AI</span><span>🔒 دفع مضمون</span><span>🏙️ نبض السوق</span></div>
+          <div class="ds-feats"><span>🎬 تصفّح تفاعلي</span><span>🧠 فحص أسعار AI</span><span>🔒 دفع مضمون</span><span>🏙️ نبض العقار والصفقات</span></div>
         </div>
         <div class="ds-center"></div>
         <div class="ds-side ds-note">
