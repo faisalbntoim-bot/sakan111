@@ -374,6 +374,10 @@
     /* Annual rental picker */
     annualMonths:12,
     annualStartYMD:'',       // yyyy-mm-dd
+    /* Daily booking guests + price-breakdown UI state */
+    guestsAdults:2, guestsChildren:0, guestsInfants:0, guestsPets:0,
+    guestsSheetOpen:false,
+    priceBreakdownOpen:false,
     editOpen:false, editIdx:null, editMode:'edit',
     dealsTab:'all', dealsOrigin:'all', galleryOpen:false, galleryIdx:0,
     dmOpen:false, dmIdx:0, dmThread:[], dmDraft:'', dmTyping:false, mktAsk:'',
@@ -664,6 +668,22 @@
       // not wired to. Do not simulate a "successful" sign-in.
       showToast('🛡️ الدخول عبر النفاذ الوطني — التكامل الفعلي قيد التفعيل. استخدم رمز SMS مؤقتًا.');
     },
+    openGuests(){ setState({guestsSheetOpen:true}); },
+    closeGuests(){ setState({guestsSheetOpen:false}); },
+    incGuests(k){
+      const cur = state['guests'+k.charAt(0).toUpperCase()+k.slice(1)] || 0;
+      const caps = { adults:16, children:10, infants:5, pets:3 };
+      if(cur >= caps[k]) return;
+      setState({['guests'+k.charAt(0).toUpperCase()+k.slice(1)]: cur+1});
+    },
+    decGuests(k){
+      const cur = state['guests'+k.charAt(0).toUpperCase()+k.slice(1)] || 0;
+      const floor = k==='adults' ? 1 : 0;
+      if(cur <= floor) return;
+      setState({['guests'+k.charAt(0).toUpperCase()+k.slice(1)]: cur-1});
+    },
+    togglePriceBreakdown(){ setState({priceBreakdownOpen:!state.priceBreakdownOpen}); },
+    payApplePay(){ showToast('🍎 Apple Pay — تكامل الدفع الفعلي عبر مزوّد مرخّص. نسخة توضيحية.'); },
     bookFromGallery(){
       // Close the gallery, put the current property in daily mode, and
       // reset the calendar so the user starts from a clean picker.
@@ -1256,10 +1276,10 @@
     const staySubtotal=nights*p.dailyRate;
     const dService=Math.round(staySubtotal*0.12), dVat=Math.round(dService*0.15), dTotal=staySubtotal+p.cleaning+dService+dVat;
     const aBase=p.price, aService=Math.round(aBase*0.025), aVat=Math.round(aService*0.15), aTotal=aBase+aService+aVat;
-    /* Reviews block extracted once so we can place it wherever the current
-       mode needs. In annual mode it stays in the "old" slot before the mode
-       toggle; in daily mode it drops after the host-offer block so the
-       flow reads features → offerings → ratings → about-host. */
+    /* Reviews are COLLAPSED by default — a single one-line summary strip
+       that the user taps to expand. Massively cuts vertical footprint
+       and keeps the page scan clean. On expand, the full thread + score
+       dimensions unfold in place. */
     const reviewsHtml = (function(){
       const cnt=Math.max(18, p.sample-13);
       const bars=[['النظافة',96],['الموقع',93],['تعامل المالك',90],['القيمة مقابل السعر',88]];
@@ -1268,22 +1288,29 @@
         {n:'منى العتيبي', t:'قبل ٣ أشهر', r:4, x:`الموقع ممتاز وقريب من المدارس، التكييف بارد والدهان جديد. الموقف أحيانًا مزدحم بس مقبول.`},
         {n:'طارق الشهري', t:'قبل ٥ أشهر', r:5, x:`استلمت الشقة بحالة ممتازة مطابقة للإعلان تمامًا، والعقد موثّق عبر المنصة بكل سهولة.`},
         {n:'ريم القحطاني', t:'قبل ٦ أشهر', r:5, x:`تجربة سلسة من أول تواصل حتى الاستلام. الحي هادئ والخدمات قريبة، أنصح فيها بشدة.`},
-        {n:'عبدالله المطيري', t:'قبل ٧ أشهر', r:4, x:`الشقة نظيفة والتشطيب راقٍ. تأخّر بسيط في تسليم المفاتيح لكن المكتب اعتذر وتم الحل.`},
-        {n:'نوف الدوسري', t:'قبل ٩ أشهر', r:5, x:`أفضل ما فيها الضمان — المبلغ ظل محفوظ حتى استلمت وتأكدت. شعور أمان مريح.`},
-        {n:'فيصل الحربي', t:'قبل سنة', r:5, x:`سكن عائلي ممتاز، إضاءة طبيعية حلوة ومطبخ واسع. جددت العقد للسنة الثانية بدون تردد.`},
       ];
-      const shownRevs=state.reviewsAll?revs:revs.slice(0,2);
-      return `<div class="off-section-title compact">تقييم المستأجرين السابقين</div>
-      <div class="rev-card compact">
+      const opened = !!state.reviewsAll;
+      if(!opened){
+        // Collapsed one-line strip — the whole ratings block is 40px tall.
+        return `<button class="rev-strip" data-act="toggleReviews" aria-expanded="false">
+          <span class="rs-star">⭐</span>
+          <span class="rs-score"><b>${p.rating}</b><small>/ ٥</small></span>
+          <span class="rs-sep">·</span>
+          <span class="rs-cnt">${nfA(cnt)} تقييم موثّق</span>
+          <span class="rs-chev">عرض التعليقات ›</span>
+        </button>`;
+      }
+      // Expanded — full compact card.
+      return `<div class="rev-card compact expanded">
         <div class="rev-sum">
           <div class="rev-score"><b>${p.rating}</b><span class="rev-score-st">${starsHtml(p.rating)}</span><small>${nfA(cnt)} تقييم موثّق</small></div>
           <div class="rev-dims">${bars.map(b=>`<div class="rev-dim"><span>${esc(b[0])}</span><b>${nfA((b[1]/20).toFixed(1))}</b></div>`).join('')}</div>
         </div>
-        <div class="rev-thread">${shownRevs.map(r=>`<div class="rvx">
+        <div class="rev-thread">${revs.map(r=>`<div class="rvx">
           <span class="rvx-av" style="background:${avc(r.n)}">${ini(r.n)}</span>
           <div class="rvx-bubble"><div class="rvx-top"><b>${esc(r.n)}</b><span class="rvx-v">✓ موثّق</span><span class="rvx-when">${esc(r.t)}</span></div><span class="rvx-stars">${starsHtml(r.r)}</span><p>${esc(r.x)}</p></div>
         </div>`).join('')}</div>
-        <button class="rev-more" data-act="toggleReviews">${state.reviewsAll?'عرض أقل ▲':`المزيد من التعليقات (${nfA(cnt)}) ▾`}</button>
+        <button class="rev-more" data-act="toggleReviews">إخفاء ▲</button>
       </div>`;
     })();
     const payMethodsHtml = `<div class="pay-methods">
@@ -1456,43 +1483,104 @@
           <div class="ai-note" style="margin:12px 0 0"><span class="dot2">🔒</span><span>مبلغك محتجز بأمان في ضمان «سكن هوب» ولا يُحوّل للمالك إلا بعد استلامك العقار.</span></div>
         </div>
         <div style="display:${!annual?'':'none'}">
-          <div class="daily-perks">
-            <div class="dperk"><span class="dp-ic">${perkIcon('bolt')}</span><span>حجز فوري</span></div>
-            <div class="dperk"><span class="dp-ic">${perkIcon('shield')}</span><span>إلغاء مجاني<small>قبل ٤٨ ساعة</small></span></div>
-            <div class="dperk"><span class="dp-ic">${perkIcon('broom')}</span><span>تنظيف مشمول</span></div>
-            <div class="dperk"><span class="dp-ic">${perkIcon('calFlex')}</span><span>تواريخ مرنة</span></div>
-          </div>
-          <div class="quote-card cal-card">
-            <div class="daily-price-row"><div><span class="dp-val">${nfA(p.dailyRate)}</span> <span class="dp-unit">ر.س / ليلة</span></div><span class="daily-badge">${moonIcon(12)} إيجار يومي</span></div>
-            ${(function(){
-              const f=o=>{ const d=new Date(today.getTime()+o*864e5); return d.getDate()+' '+calMonthNames[d.getMonth()]; };
-              const arr=state.calSelStart!=null?f(state.calSelStart):'أضف تاريخ';
-              const dep=state.calSelEnd!=null?f(state.calSelEnd):'أضف تاريخ';
-              const ci="<svg viewBox='0 0 24 24' width='15' height='15' fill='none' stroke='currentColor' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'><path d='M15 3h4a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1h-4'/><path d='M10 17l5-5-5-5M15 12H3'/></svg>";
-              const co="<svg viewBox='0 0 24 24' width='15' height='15' fill='none' stroke='currentColor' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'><path d='M9 3H5a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h4'/><path d='M16 17l5-5-5-5M21 12H9'/></svg>";
-              return `<div class="abnb-dates" data-act="scrollToCal">
-                <div class="abnb-cell ${state.calSelStart!=null?'set':''}"><span class="abnb-k">${ci} تسجيل الوصول</span><span class="abnb-v">${arr}</span></div>
-                <div class="abnb-cell ${state.calSelEnd!=null?'set':''}"><span class="abnb-k">${co} تسجيل المغادرة</span><span class="abnb-v">${dep}</span></div>
-              </div>`;
-            })()}
-            <div class="cal-head"><span>${calMonthNames[today.getMonth()]} ${today.getFullYear()}</span><span class="cal-legend"><i class="dotL g"></i> متاح <i class="dotL gray" style="margin-inline-start:8px"></i> محجوز</span></div>
-            <div class="cal-weekdays">${weekHead}</div>
-            <div class="cal-grid">${pad}${days}</div>
-            <div class="nights-pill ${nights>0?'on':''}">${nights>0?`${moonIcon(12)} ${nights} ليالٍ محسوبة`:`${moonIcon(12)} اختر تاريخ الوصول ثم المغادرة من التقويم`}</div>
-          </div>
-          ${nights>0?`
-          <div class="quote-card fee-card inline">
-            <div class="fee-row"><span>${nfA(nights)} ليالٍ × ${nfA(p.dailyRate)} ر.س</span><span>${nfA(staySubtotal)} ر.س</span></div>
-            <div class="fee-row"><span>رسوم التنظيف</span><span>${nfA(p.cleaning)} ر.س</span></div>
-            <div class="fee-row"><span>رسوم خدمة سكن هوب (12%)</span><span>${nfA(dService)} ر.س</span></div>
-            <div class="fee-row"><span>ضريبة القيمة المضافة 15%</span><span>${nfA(dVat)} ر.س</span></div>
-            <div class="fee-row total"><span>الإجمالي المطلوب</span><span>${nfA(dTotal)} ر.س</span></div>
-          </div>
-          <div class="pay-title">ادفع مباشرة</div>
-          ${payMethodsHtml}
-          <button class="cta primary pay-cta" style="width:100%;margin-top:10px" data-act="payNow"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><rect x="4.5" y="10.5" width="15" height="9.5" rx="2"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/></svg> ادفع ${nfA(dTotal)} ر.س الآن</button>
-          <div class="no-charge">${railIcon('check')} إلغاء مجاني قبل ٤٨ ساعة من الوصول</div>`
-          :`<div class="nights-pill" style="margin-top:12px">${moonIcon(12)} اختر تواريخ الإقامة ليظهر السعر والدفع مباشرة</div>`}
+          ${(function(){
+            // ---- New airbnb-style daily booking sheet ----
+            // Layout: dates row → guests row → total row (tap to expand)
+            //         → free cancellation → payment section → pay CTAs.
+            const f = o => { const d=new Date(today.getTime()+o*864e5); return d.getDate()+' '+calMonthNames[d.getMonth()]; };
+            const arr = state.calSelStart!=null ? f(state.calSelStart) : 'اختر تاريخ';
+            const dep = state.calSelEnd!=null   ? f(state.calSelEnd)   : 'اختر تاريخ';
+            const gA = state.guestsAdults||1, gC = state.guestsChildren||0, gI = state.guestsInfants||0, gP = state.guestsPets||0;
+            const gTotal = gA + gC;
+            const guestsSummary = (function(){
+              const parts=[`${nfA(gA)} بالغ${gA>1?'':''}`];
+              if(gC) parts.push(`${nfA(gC)} أطفال`);
+              if(gI) parts.push(`${nfA(gI)} رضّع`);
+              if(gP) parts.push(`${nfA(gP)} حيوان أليف`);
+              return parts.join(' · ');
+            })();
+            const priced = nights>0;
+            const cancelBadge = `<div class="cancel-badge">
+              <svg viewBox='0 0 24 24' width='16' height='16' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M20 6L9 17l-5-5'/></svg>
+              <span>إلغاء مجاني قبل ٤٨ ساعة من الوصول</span>
+            </div>`;
+            const dateIc = "<svg viewBox='0 0 24 24' width='18' height='18' fill='none' stroke='currentColor' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='4' width='18' height='18' rx='2'/><path d='M16 2v4M8 2v4M3 10h18'/></svg>";
+            const guestsIc = "<svg viewBox='0 0 24 24' width='18' height='18' fill='none' stroke='currentColor' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><path d='M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2'/><circle cx='9' cy='7' r='4'/><path d='M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75'/></svg>";
+            const moneyIc = "<svg viewBox='0 0 24 24' width='18' height='18' fill='none' stroke='currentColor' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='9'/><path d='M12 6v12M8.5 9.5C8.5 8.12 9.62 7 11 7h2c1.38 0 2.5 1.12 2.5 2.5S14.38 12 13 12h-2c-1.38 0-2.5 1.12-2.5 2.5S9.62 17 11 17h2c1.38 0 2.5-1.12 2.5-2.5'/></svg>";
+            const chev = st => `<span class="brv-chev">${st==='open'?'▲':'▼'}</span>`;
+            return `<div class="book-v2">
+              <div class="book-v2-head">
+                <span class="bvh-price"><b>${nfA(p.dailyRate)}</b> <small>ر.س / ليلة</small></span>
+                <span class="daily-badge">${moonIcon(12)} إيجار يومي</span>
+              </div>
+
+              <button class="book-row" data-act="scrollToCal">
+                <span class="br-ic">${dateIc}</span>
+                <div class="br-tx">
+                  <span class="br-k">التواريخ</span>
+                  <span class="br-v">${esc(arr)} → ${esc(dep)}</span>
+                </div>
+                <span class="br-chev">›</span>
+              </button>
+
+              <button class="book-row" data-act="openGuests">
+                <span class="br-ic">${guestsIc}</span>
+                <div class="br-tx">
+                  <span class="br-k">الضيوف</span>
+                  <span class="br-v">${esc(guestsSummary)}</span>
+                </div>
+                <span class="br-chev">›</span>
+              </button>
+
+              <button class="book-row total ${state.priceBreakdownOpen?'open':''}" data-act="togglePriceBreakdown" ${priced?'':'disabled'}>
+                <span class="br-ic">${moneyIc}</span>
+                <div class="br-tx">
+                  <span class="br-k">السعر الإجمالي</span>
+                  <span class="br-v">${priced?`<b>${nfA(dTotal)}</b> ر.س`:'حدّد التواريخ لعرض السعر'}</span>
+                </div>
+                <span class="br-chev">${priced?(state.priceBreakdownOpen?'▲':'▼'):'—'}</span>
+              </button>
+
+              ${(priced && state.priceBreakdownOpen)?`<div class="price-breakdown">
+                <div class="pb-row"><span>${nfA(nights)} ليالٍ × ${nfA(p.dailyRate)} ر.س</span><span>${nfA(staySubtotal)} ر.س</span></div>
+                <div class="pb-row"><span>رسوم التنظيف</span><span>${nfA(p.cleaning)} ر.س</span></div>
+                <div class="pb-row"><span>رسوم خدمة سكن هوب (12%)</span><span>${nfA(dService)} ر.س</span></div>
+                <div class="pb-row"><span>ضريبة القيمة المضافة 15%</span><span>${nfA(dVat)} ر.س</span></div>
+                <div class="pb-row total"><span>الإجمالي المطلوب</span><span>${nfA(dTotal)} ر.س</span></div>
+              </div>`:''}
+
+              ${cancelBadge}
+
+              <div class="pay-section">
+                <div class="ps-title">طريقة الدفع</div>
+                <button class="pay-apple" data-act="payApplePay" ${priced?'':'disabled'}>
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M17.2 12.3c0-1.9 1.6-2.9 1.7-2.9-1-1.4-2.4-1.6-2.9-1.6-1.2-.1-2.4.7-3 .7-.6 0-1.6-.7-2.6-.7-1.3 0-2.6.8-3.2 2-1.4 2.4-.4 6 1 8 .7.9 1.4 2 2.4 1.9 1-.1 1.3-.6 2.5-.6s1.5.6 2.6.6 1.7-.9 2.3-1.8c.7-1 1-2 1-2.1 0 0-1.9-.8-2.3-2.8zM15.3 6.4c.5-.7.9-1.6.8-2.5-.8 0-1.8.5-2.4 1.2-.5.6-1 1.5-.8 2.4.9.1 1.8-.4 2.4-1.1z"/></svg>
+                  <span>الدفع بـ <b>Apple&nbsp;Pay</b></span>
+                </button>
+                <div class="ps-cards-title">أو بطاقات أخرى</div>
+                <div class="ps-cards">
+                  <button class="ps-card" data-act="payNow" ${priced?'':'disabled'}>
+                    <span class="mada-lbl">مدى</span>
+                  </button>
+                  <button class="ps-card" data-act="payNow" ${priced?'':'disabled'}>
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 9.5h19M6 15h4"/></svg>
+                    <span>بطاقة ائتمان</span>
+                  </button>
+                </div>
+              </div>
+
+              <button class="cta primary pay-cta full" data-act="payNow" ${priced?'':'disabled'}>
+                ${priced?`✓ تأكيد الحجز · ادفع ${nfA(dTotal)} ر.س`:'اختر التواريخ أولاً'}
+              </button>
+
+              <div class="pb-cal-collapsed">
+                <div class="cal-head compact"><span>${calMonthNames[today.getMonth()]} ${today.getFullYear()}</span><span class="cal-legend"><i class="dotL g"></i> متاح <i class="dotL gray" style="margin-inline-start:8px"></i> محجوز</span></div>
+                <div class="cal-weekdays">${weekHead}</div>
+                <div class="cal-grid">${pad}${days}</div>
+                <div class="nights-pill ${nights>0?'on':''}">${nights>0?`${moonIcon(12)} ${nights} ليالٍ محسوبة`:`${moonIcon(12)} حدّد الوصول ثم المغادرة`}</div>
+              </div>
+            </div>`;
+          })()}
         </div>
       </div>
     </div>`;
@@ -1668,6 +1756,37 @@
         <button class="cta primary" style="width:100%;opacity:${ready?1:.55}" data-act="confirmBooking">✅ تأكيد حجز الموعد</button>
       </div>`;
   }
+  function guestsSheetHtml(){
+    // Bottom sheet with per-guest-type +/- controls.
+    const row = (k, title, sub) => {
+      const val = state['guests'+k.charAt(0).toUpperCase()+k.slice(1)] || 0;
+      const floor = k==='adults' ? 1 : 0;
+      const dis = val <= floor ? 'disabled' : '';
+      return `<div class="grow">
+        <div class="grow-tx"><b>${esc(title)}</b>${sub?`<small>${esc(sub)}</small>`:''}</div>
+        <div class="grow-ctrls">
+          <button class="grow-btn" data-act="decGuests" data-key="${esc(k)}" ${dis} aria-label="نقصان">−</button>
+          <span class="grow-n">${nfA(val)}</span>
+          <button class="grow-btn" data-act="incGuests" data-key="${esc(k)}" aria-label="زيادة">+</button>
+        </div>
+      </div>`;
+    };
+    return `
+      <div class="sheet-overlay above ${state.guestsSheetOpen?'open':''}" data-act="closeGuests"></div>
+      <div class="sheet above guests-sheet ${state.guestsSheetOpen?'open':''}">
+        <div class="sheet-handle"></div>
+        <div class="sheet-head"><h3>👥 عدد الضيوف</h3><button class="close" data-act="closeGuests">✕</button></div>
+        <div class="guests-list">
+          ${row('adults', 'البالغون', '١٣ سنة فأكثر')}
+          ${row('children', 'الأطفال', 'من ٢ إلى ١٢ سنة')}
+          ${row('infants', 'الرضّع', 'أقل من ٢ سنة')}
+          ${row('pets', 'الحيوانات الأليفة', 'يمكن رفض بعض الحيوانات')}
+        </div>
+        <div class="ai-note"><span class="dot2">ⓘ</span><span>الحد الأقصى للإشغال يعتمد على العقار — قد يفرض المضيف حدودًا إضافية.</span></div>
+        <button class="cta primary" style="width:100%;margin-top:6px" data-act="closeGuests">تم</button>
+      </div>`;
+  }
+
   function tourHtml(){
     const p=properties[state.detailOpen?state.detailIdx:0]||properties[0];
     const g=galleryFor(p,state.detailIdx);
@@ -2382,7 +2501,7 @@
       if(showUrgent) return !!m.urgent;
       return origin==='all' ? true : m.origin===origin;
     });
-    const origins=[['all','الكل'],['سكني','سكني'],['تجاري','تجاري'],['زراعي','زراعي'],['urgent','جاد',true]];
+    const origins=[['all','الكل'],['سكني','سكني'],['تجاري','تجاري'],['زراعي','زراعي'],['urgent','طلب جاد',true]];
     const card = (m,i) => { const img=thumbFor(m); return `<div class="mkt-item2 ${oc(m.origin)} ${m.side} ${m.kind==='sale'?'is-sale':''} ${m.urgent?'is-urgent':''}" style="animation-delay:${(i*0.04).toFixed(2)}s" ${m.idx!=null?`data-act="openDetail" data-idx="${m.idx}"`:''}>
       <div class="mi-ph2 ${img?'':'none'}" ${img?`style="background-image:url('${img}')"`:''}>${img?'':`<span class="mi-ph-ic">${storefrontIconSvg(18)}</span>`}<span class="mi-tag2 ${tagCls(m)}">${tagLbl(m)}</span></div>
       <div class="mi-body2">
@@ -3367,6 +3486,7 @@
       ${notifHtml()}
       ${reqsPageHtml()}
       ${bookingHtml()}
+      ${guestsSheetHtml()}
       ${tourHtml()}
       ${captureHtml()}
       ${officesHtml()}
