@@ -1,18 +1,113 @@
 /* ==========================================================================
-   Booking flow styles — scoped to /[locale]/properties/[id]/booking/*.
-   Loaded once by the segment's layout.tsx; does not leak into the SPA
-   at /ar because Next.js only ships this stylesheet with the routes
-   under this segment.
+   Booking flow — scoped to /[locale]/properties/[id]/booking/*.
+   The layout wraps every step in a phone-shaped frame so on desktop the
+   flow reads like a real mobile app being previewed, while on a phone
+   the frame melts away and the content takes the whole screen.
    ========================================================================== */
 
+/* ---- Stage (behind the phone frame on desktop) -------------------------- */
+.bkw-stage{
+  min-height:100dvh;
+  background:
+    radial-gradient(circle at 30% 20%, rgba(14,124,102,.10), transparent 55%),
+    radial-gradient(circle at 75% 80%, rgba(181,138,44,.10), transparent 55%),
+    linear-gradient(180deg,#F4EFE2 0%,#EFE9DA 100%);
+  display:flex; align-items:center; justify-content:center;
+  padding:0;
+  font-family:'SF Arabic','Segoe UI','Noto Sans Arabic','Tajawal',system-ui,-apple-system,Tahoma,sans-serif;
+  color:#0C1512;
+}
+
+/* ---- Phone frame -------------------------------------------------------- */
 .bkw{
+  position:relative;
+  width:100%;
   min-height:100dvh;
   background:#F7F5EE;
-  color:#0C1512;
-  font-family:'SF Arabic','Segoe UI','Noto Sans Arabic','Tajawal',system-ui,-apple-system,Tahoma,sans-serif;
-  padding-bottom:120px;
+  display:flex; flex-direction:column;
 }
 .bkw *{ box-sizing:border-box; }
+
+/* Fake iOS status bar — only shown when the frame is visible (desktop). */
+.bkw-status{
+  display:none;
+}
+.bkw-home-indicator{
+  display:none;
+}
+
+/* Scroll area inside the phone. On mobile this is just the page. */
+.bkw-scroll{
+  flex:1; min-height:0;
+  padding-bottom:calc(120px + env(safe-area-inset-bottom));
+}
+
+/* On desktop, wrap the booking flow in a phone-shaped device with a
+   subtle drop shadow, status bar, and home indicator. */
+@media (min-width:720px){
+  .bkw-stage{ padding:32px 16px; }
+  .bkw{
+    width:420px;
+    min-height:auto;
+    height:calc(100dvh - 64px);
+    max-height:900px;
+    border-radius:44px;
+    box-shadow:
+      0 30px 70px rgba(10,62,51,.22),
+      0 10px 30px rgba(10,62,51,.14),
+      inset 0 0 0 1px rgba(255,255,255,.6),
+      inset 0 0 0 6px #0C1512;
+    padding:6px;
+    background:#0C1512;
+    overflow:hidden;
+  }
+  .bkw::before, .bkw::after{
+    content:'';
+    position:absolute;
+    background:#0C1512;
+    z-index:5;
+  }
+  .bkw > *{ position:relative; }
+  .bkw-status{
+    display:flex; align-items:center; justify-content:space-between;
+    height:44px;
+    padding:0 26px;
+    background:#F7F5EE;
+    color:#0C1512;
+    font-family:'SF Pro Display','SF Pro Text',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    font-weight:700; font-size:14px;
+    border-radius:36px 36px 0 0;
+    position:relative;
+    z-index:2;
+  }
+  .bkw-status-notch{
+    position:absolute; top:6px; left:50%; transform:translateX(-50%);
+    width:110px; height:28px;
+    background:#0C1512; border-radius:20px;
+  }
+  .bkw-status-time{ direction:ltr; }
+  .bkw-status-icons{ display:inline-flex; align-items:center; gap:6px; direction:ltr; }
+  .bkw-scroll{
+    flex:1;
+    background:#F7F5EE;
+    overflow-y:auto;
+    -webkit-overflow-scrolling:touch;
+    border-radius:0 0 36px 36px;
+    padding-bottom:calc(130px + env(safe-area-inset-bottom));
+  }
+  .bkw-home-indicator{
+    display:block;
+    position:absolute;
+    bottom:14px; left:50%; transform:translateX(-50%);
+    width:130px; height:5px;
+    background:#0C1512;
+    border-radius:3px;
+    z-index:5;
+    opacity:.85;
+  }
+  /* Sticky CTA sits inside the phone, not glued to the browser edge. */
+  .bk-sticky{ position:absolute !important; }
+}
 
 /* ---- Header (BookingChrome) --------------------------------------------- */
 .bkc{
@@ -22,11 +117,10 @@
   grid-template-rows:auto auto;
   align-items:center;
   gap:8px 12px;
-  padding:12px 16px 14px;
-  background:rgba(247,245,238,.92);
-  backdrop-filter:saturate(1.1) blur(8px);
-  -webkit-backdrop-filter:saturate(1.1) blur(8px);
-  border-bottom:1px solid rgba(14,124,102,.08);
+  padding:14px 18px 12px;
+  background:rgba(247,245,238,.94);
+  backdrop-filter:saturate(1.2) blur(10px);
+  -webkit-backdrop-filter:saturate(1.2) blur(10px);
 }
 .bkc-back{
   grid-column:1; grid-row:1;
@@ -36,10 +130,10 @@
   border-radius:12px;
   color:#0C1512; cursor:pointer;
   box-shadow:0 1px 3px rgba(0,0,0,.05);
-  transition:background .15s ease, box-shadow .15s ease;
+  transition:background .15s ease, box-shadow .15s ease, transform .12s ease;
 }
 .bkc-back:hover{ background:#fefefe; box-shadow:0 2px 6px rgba(0,0,0,.08); }
-/* In RTL, chevron arrow visually points to the right (back = forward in flow). */
+.bkc-back:active{ transform:scale(.94); }
 .bkc-back svg{ transform:scaleX(-1); }
 .bkc-brand{
   grid-column:2; grid-row:1;
@@ -54,77 +148,77 @@
   color:#fff; border-radius:8px;
   font-family:'Inter',system-ui,sans-serif; font-weight:900;
 }
-.bkc-brand-name{ font-size:14px; }
+.bkc-brand-name{ font-size:13.5px; }
 .bkc-spacer{ grid-column:3; grid-row:1; }
 .bkc-title{
   grid-column:1 / -1; grid-row:2;
-  margin:6px 0 0;
+  margin:8px 0 2px;
   font-size:22px; font-weight:900; color:#0A3E33;
+  letter-spacing:-.3px;
   text-align:start;
 }
 
 /* ---- Page container ----------------------------------------------------- */
 .bkp{
-  max-width:640px;
-  margin:0 auto;
-  padding:16px;
-  display:flex; flex-direction:column; gap:16px;
+  padding:14px 16px;
+  display:flex; flex-direction:column; gap:14px;
 }
 
 /* ---- Section shell ------------------------------------------------------ */
 .bks{
   background:#fff;
   border:1px solid rgba(14,124,102,.10);
-  border-radius:20px;
-  padding:18px;
+  border-radius:18px;
+  padding:16px;
   box-shadow:0 2px 8px rgba(10,62,51,.03);
 }
 .bks-title{
-  margin:0 0 12px;
-  font-size:15px; font-weight:800; color:#0A3E33;
+  margin:0 0 8px;
+  font-size:14.5px; font-weight:800; color:#0A3E33;
 }
 .bks-sub{
-  margin:-4px 0 12px;
-  font-size:12px; color:#5B6B65;
+  margin:-2px 0 12px;
+  font-size:12px; color:#5B6B65; line-height:1.6;
 }
 
 /* ---- RtlCalendar -------------------------------------------------------- */
 .rcal{ direction:rtl; }
 .rcal-head{
   display:flex; align-items:center; justify-content:space-between;
-  padding:0 4px 12px;
+  padding:0 2px 12px;
 }
 .rcal-title{
-  font-size:15px; font-weight:800; color:#0A3E33;
+  font-size:14.5px; font-weight:800; color:#0A3E33;
 }
 .rcal-nav{
-  width:32px; height:32px;
+  width:34px; height:34px;
   border:0; background:#F5F7F1;
-  border-radius:10px;
+  border-radius:11px;
   display:flex; align-items:center; justify-content:center;
   color:#0A3E33; cursor:pointer;
-  transition:background .15s ease, opacity .15s ease;
+  transition:background .15s ease, opacity .15s ease, transform .1s ease;
 }
 .rcal-nav:hover:not(:disabled){ background:#E9EFE5; }
+.rcal-nav:active:not(:disabled){ transform:scale(.92); }
 .rcal-nav:disabled{ opacity:.35; cursor:not-allowed; }
 .rcal-weekdays{
   display:grid; grid-template-columns:repeat(7,1fr);
-  gap:4px; margin-bottom:6px;
+  gap:3px; margin-bottom:6px;
 }
 .rcal-wd{
-  text-align:center; font-size:11px; font-weight:800; color:#5B6B65;
+  text-align:center; font-size:10.5px; font-weight:800; color:#5B6B65;
   padding:6px 0;
 }
 .rcal-grid{
   display:grid; grid-template-columns:repeat(7,1fr);
-  gap:4px;
+  gap:3px;
 }
 .rcal-day{
-  min-height:44px;
+  min-height:42px;
   display:flex; align-items:center; justify-content:center;
   border:0; background:transparent;
   border-radius:12px;
-  font-family:inherit; font-size:14px; font-weight:700;
+  font-family:inherit; font-size:13.5px; font-weight:700;
   color:#0C1512; cursor:pointer;
   transition:background .15s ease, color .15s ease, transform .12s ease;
 }
@@ -132,6 +226,7 @@
 .rcal-day:not(.pad):not(.disabled):hover{
   background:rgba(14,124,102,.10); transform:scale(1.04);
 }
+.rcal-day:not(.pad):not(.disabled):active{ transform:scale(.94); }
 .rcal-day.disabled{
   color:#C4CCC7; text-decoration:line-through; cursor:not-allowed;
 }
@@ -149,40 +244,41 @@
 }
 
 /* ---- GuestsPicker ------------------------------------------------------- */
-.gp{ display:flex; flex-direction:column; gap:14px; }
+.gp{ display:flex; flex-direction:column; }
 .gp-row{
   display:flex; align-items:center; justify-content:space-between;
   gap:12px;
-  padding:12px 0;
+  padding:14px 0;
   border-bottom:1px dashed rgba(14,124,102,.12);
 }
-.gp-row:last-of-type{ border-bottom:0; }
+.gp-row:last-of-type{ border-bottom:0; padding-bottom:6px; }
 .gp-tx{ display:flex; flex-direction:column; gap:2px; }
 .gp-tx b{ font-size:14px; font-weight:800; color:#0C1512; }
-.gp-tx span{ font-size:12px; color:#5B6B65; }
+.gp-tx span{ font-size:11.5px; color:#5B6B65; }
 .gp-ctrl{ display:flex; align-items:center; gap:12px; }
 .gp-btn{
-  width:36px; height:36px;
+  width:34px; height:34px;
   border-radius:50%;
   border:1.5px solid rgba(14,124,102,.32);
   background:#fff; color:#0A6B54;
-  font-size:18px; font-weight:800;
+  font-size:17px; font-weight:800;
   cursor:pointer;
   display:flex; align-items:center; justify-content:center;
   transition:transform .12s ease, background .15s ease, border-color .15s ease, opacity .15s ease;
 }
-.gp-btn:hover:not(:disabled){ background:#F5FAF6; transform:scale(1.06); }
+.gp-btn:hover:not(:disabled){ background:#F5FAF6; }
+.gp-btn:active:not(:disabled){ transform:scale(.9); }
 .gp-btn:disabled{ opacity:.35; cursor:not-allowed; }
 .gp-val{
   min-width:24px; text-align:center;
   font-size:15px; font-weight:800; color:#0C1512;
 }
 .gp-note{
-  margin-top:2px;
+  margin-top:10px;
   padding:8px 10px;
   background:#F5F7F1;
   border-radius:10px;
-  font-size:11.5px; color:#5B6B65; font-weight:600;
+  font-size:11px; color:#5B6B65; font-weight:600;
 }
 
 /* ---- PropertyMiniCard --------------------------------------------------- */
@@ -196,7 +292,7 @@
 }
 .pmc-thumb{
   flex-shrink:0;
-  width:64px; height:64px;
+  width:62px; height:62px;
   border-radius:14px;
   background-size:cover; background-position:center;
   display:flex; align-items:center; justify-content:center;
@@ -210,49 +306,52 @@
 }
 .pmc-body{ display:flex; flex-direction:column; gap:2px; min-width:0; }
 .pmc-name{ font-size:14px; font-weight:800; color:#0C1512; }
-.pmc-loc{ font-size:12px; color:#5B6B65; }
-.pmc-rating{ font-size:12px; font-weight:800; color:#B58A2C; }
+.pmc-loc{ font-size:11.5px; color:#5B6B65; }
+.pmc-rating{ font-size:11.5px; font-weight:800; color:#B58A2C; }
 
-/* ---- Info rows on price/review pages ------------------------------------ */
-.bk-info{ display:flex; flex-direction:column; gap:10px; }
+/* ---- Info rows ---------------------------------------------------------- */
+.bk-info{ display:flex; flex-direction:column; }
 .bk-info-row{
   display:flex; justify-content:space-between; align-items:baseline;
-  padding:10px 0;
+  padding:12px 0;
   border-bottom:1px dashed rgba(14,124,102,.12);
 }
-.bk-info-row:last-child{ border-bottom:0; }
-.bk-info-row .bk-k{ font-size:13px; font-weight:700; color:#5B6B65; }
+.bk-info-row:last-child{ border-bottom:0; padding-bottom:4px; }
+.bk-info-row .bk-k{ font-size:12.5px; font-weight:700; color:#5B6B65; }
 .bk-info-row .bk-v{ font-size:14px; font-weight:800; color:#0C1512; text-align:end; }
 .bk-info-row .bk-v small{ display:block; font-size:11px; font-weight:600; color:#5B6B65; margin-top:2px; }
 
 /* ---- Price breakdown ---------------------------------------------------- */
-.bk-price{ display:flex; flex-direction:column; gap:6px; }
+.bk-price{ display:flex; flex-direction:column; }
 .bk-price .pr-row{
   display:flex; justify-content:space-between; align-items:center;
-  padding:10px 0;
-  font-size:13.5px; color:#0C1512;
+  padding:11px 0;
+  font-size:13px; color:#0C1512;
 }
 .bk-price .pr-row + .pr-row{
   border-top:1px dashed rgba(14,124,102,.12);
 }
 .bk-price .pr-row.total{
-  margin-top:6px;
+  margin-top:4px;
   padding-top:14px;
   border-top:2px solid rgba(14,124,102,.20);
-  font-size:16px; font-weight:900; color:#0A3E33;
+  font-size:15.5px; font-weight:900; color:#0A3E33;
 }
-.bk-price .pr-row.total .pr-v{ color:#0A6B54; font-size:20px; }
+.bk-price .pr-row.total .pr-v{ color:#0A6B54; font-size:19px; }
 
 /* ---- Coupon row --------------------------------------------------------- */
 .bk-coupon{
   display:flex; align-items:center; justify-content:space-between;
-  padding:12px 14px;
-  background:#F5F7F1;
-  border:1px dashed rgba(14,124,102,.20);
-  border-radius:12px;
-  color:#0A6B54; font-size:13px; font-weight:700;
+  width:100%;
+  padding:14px 16px;
+  background:#fff;
+  border:1px dashed rgba(14,124,102,.24);
+  border-radius:16px;
+  color:#0A6B54; font-family:inherit; font-size:13px; font-weight:700;
   cursor:pointer;
+  transition:background .15s ease;
 }
+.bk-coupon:hover{ background:#FBFDF9; }
 .bk-coupon svg{ opacity:.7; }
 
 /* ---- Sticky CTA --------------------------------------------------------- */
@@ -261,11 +360,11 @@
   bottom:0; left:0; right:0;
   z-index:30;
   padding:14px 16px calc(14px + env(safe-area-inset-bottom));
-  background:linear-gradient(180deg, rgba(247,245,238,0) 0%, rgba(247,245,238,.95) 30%, rgba(247,245,238,1) 100%);
+  background:linear-gradient(180deg, rgba(247,245,238,0) 0%, rgba(247,245,238,.95) 35%, rgba(247,245,238,1) 100%);
   display:flex; justify-content:center;
 }
 .bk-sticky-inner{
-  width:100%; max-width:640px;
+  width:100%;
   display:flex; align-items:center; gap:12px;
 }
 .bk-sticky-tx{
@@ -273,10 +372,10 @@
   flex:1; min-width:0;
 }
 .bk-sticky-tx b{ font-size:15px; font-weight:900; color:#0A3E33; }
-.bk-sticky-tx small{ font-size:11.5px; color:#5B6B65; font-weight:600; }
+.bk-sticky-tx small{ font-size:11px; color:#5B6B65; font-weight:600; }
 .bk-cta{
   flex-shrink:0;
-  min-width:180px;
+  min-width:150px;
   padding:14px 22px;
   border:0; border-radius:14px;
   background:linear-gradient(180deg,#0E7C66 0%,#0A6B54 100%);
@@ -290,6 +389,7 @@
   transform:translateY(-1px);
   box-shadow:0 8px 22px rgba(14,124,102,.34);
 }
+.bk-cta:active:not(:disabled){ transform:scale(.97); }
 .bk-cta:disabled{ opacity:.45; cursor:not-allowed; box-shadow:none; }
 
 /* ---- Not-found tile ----------------------------------------------------- */
@@ -307,13 +407,246 @@
   text-decoration:none; font-weight:800; font-size:13px;
 }
 
+/* ==========================================================================
+   Payment page (Apple Pay-forward). Sits inside the same phone frame so
+   the transition from review → pay feels like the same native app.
+   ========================================================================== */
+
+.pay-summary{
+  background:linear-gradient(180deg,#FFFFFF 0%,#F7FAF6 100%);
+  border:1px solid rgba(14,124,102,.14);
+  border-radius:20px;
+  padding:16px;
+  display:flex; align-items:center; justify-content:space-between;
+  box-shadow:0 4px 14px rgba(10,62,51,.05);
+}
+.pay-summary .pay-sum-lbl{
+  display:flex; flex-direction:column; gap:2px;
+}
+.pay-summary .pay-sum-lbl small{
+  font-size:10.5px; letter-spacing:.6px; text-transform:uppercase;
+  color:#5B6B65; font-weight:800;
+}
+.pay-summary .pay-sum-lbl b{
+  font-size:13.5px; color:#0C1512; font-weight:700;
+}
+.pay-summary .pay-sum-total{
+  font-size:24px; font-weight:900; color:#0A6B54;
+  letter-spacing:-.4px;
+}
+.pay-summary .pay-sum-total small{
+  font-size:11px; color:#5B6B65; font-weight:700; margin-inline-start:4px;
+}
+
+.pay-method-title{
+  margin:6px 0 2px;
+  padding:0 4px;
+  font-size:12px; font-weight:800; color:#5B6B65;
+  letter-spacing:.4px; text-transform:uppercase;
+}
+
+.pay-methods{
+  display:flex; flex-direction:column; gap:8px;
+}
+.pay-method{
+  display:flex; align-items:center; gap:12px;
+  padding:14px 14px;
+  background:#fff;
+  border:1.5px solid rgba(14,124,102,.10);
+  border-radius:16px;
+  cursor:pointer;
+  transition:border-color .15s ease, background .15s ease, transform .1s ease;
+  font-family:inherit;
+  text-align:start;
+  width:100%;
+}
+.pay-method:hover{ background:#FBFDF9; }
+.pay-method:active{ transform:scale(.99); }
+.pay-method.on{
+  border-color:#0E7C66;
+  background:linear-gradient(180deg,#F5FAF6 0%,#EBF3EC 100%);
+  box-shadow:0 3px 10px rgba(14,124,102,.10);
+}
+.pay-method .pm-ic{
+  flex-shrink:0;
+  width:44px; height:32px;
+  border-radius:8px;
+  display:flex; align-items:center; justify-content:center;
+  background:#F5F7F1;
+  color:#0C1512;
+  font-weight:900;
+}
+.pay-method .pm-ic.apple{
+  background:#000; color:#fff;
+}
+.pay-method .pm-ic.mada{
+  background:linear-gradient(90deg,#84BD00 0%,#EAAA00 50%,#00A3E0 100%);
+  color:#fff;
+  font-family:'Tajawal',system-ui,sans-serif;
+  font-size:11px;
+}
+.pay-method .pm-ic.card{
+  background:linear-gradient(150deg,#0E7C66,#0A6B54);
+  color:#fff;
+}
+.pay-method .pm-lbl{
+  flex:1; min-width:0;
+  display:flex; flex-direction:column; gap:2px;
+}
+.pay-method .pm-lbl b{ font-size:14px; font-weight:800; color:#0C1512; }
+.pay-method .pm-lbl small{ font-size:11.5px; color:#5B6B65; font-weight:600; }
+.pay-method .pm-check{
+  flex-shrink:0;
+  width:22px; height:22px;
+  border-radius:50%;
+  border:2px solid rgba(14,124,102,.24);
+  background:#fff;
+  display:flex; align-items:center; justify-content:center;
+}
+.pay-method.on .pm-check{
+  border-color:#0E7C66;
+  background:#0E7C66;
+  color:#fff;
+}
+.pay-method .pm-check svg{ opacity:0; transition:opacity .12s ease; }
+.pay-method.on .pm-check svg{ opacity:1; }
+
+/* Apple Pay button — the true black pill with the Apple Pay glyph. */
+.pay-cta-ap{
+  display:flex; align-items:center; justify-content:center; gap:8px;
+  width:100%;
+  padding:16px 22px;
+  border:0; border-radius:16px;
+  background:#000; color:#fff;
+  font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',system-ui,sans-serif;
+  font-weight:600; font-size:16px;
+  letter-spacing:.2px;
+  cursor:pointer;
+  box-shadow:0 8px 22px rgba(0,0,0,.22);
+  transition:transform .1s ease, box-shadow .18s ease;
+}
+.pay-cta-ap:hover{ transform:translateY(-1px); box-shadow:0 12px 28px rgba(0,0,0,.28); }
+.pay-cta-ap:active{ transform:scale(.98); }
+.pay-cta-ap .ap-mark{
+  display:inline-flex; align-items:center; gap:3px;
+  font-weight:700;
+  font-size:17px;
+  letter-spacing:.5px;
+}
+.pay-cta-ap .ap-mark .ap-glyph{
+  display:inline-flex; align-items:center; justify-content:center;
+  width:18px; height:22px;
+}
+
+.pay-cta-alt{
+  display:flex; align-items:center; justify-content:center;
+  width:100%;
+  padding:14px 22px;
+  border:0; border-radius:14px;
+  background:linear-gradient(180deg,#0E7C66,#0A6B54);
+  color:#fff;
+  font-family:inherit; font-weight:900; font-size:14.5px;
+  cursor:pointer;
+  box-shadow:0 6px 18px rgba(14,124,102,.28);
+  transition:transform .12s ease, box-shadow .18s ease;
+}
+.pay-cta-alt:hover{ transform:translateY(-1px); box-shadow:0 8px 22px rgba(14,124,102,.34); }
+.pay-cta-alt:active{ transform:scale(.98); }
+
+.pay-secure{
+  display:flex; align-items:flex-start; gap:10px;
+  padding:12px 14px;
+  background:#F5F7F1;
+  border:1px dashed rgba(14,124,102,.20);
+  border-radius:12px;
+  font-size:11.5px; color:#0A6B54; font-weight:600;
+  line-height:1.65;
+}
+.pay-secure svg{ flex-shrink:0; margin-top:2px; color:#0A6B54; }
+
+.pay-tos{
+  text-align:center;
+  padding:6px 4px 2px;
+  font-size:10.5px; color:#5B6B65; line-height:1.7;
+}
+.pay-tos a{ color:#0A6B54; text-decoration:underline; }
+
+/* Apple Pay confirmation overlay — mimics the iOS Pay sheet. */
+.pay-ap-overlay{
+  position:fixed; inset:0;
+  background:rgba(12,21,18,.55);
+  backdrop-filter:blur(6px);
+  -webkit-backdrop-filter:blur(6px);
+  z-index:60;
+  display:flex; align-items:flex-end; justify-content:center;
+  opacity:0; pointer-events:none;
+  transition:opacity .22s ease;
+}
+.pay-ap-overlay.open{ opacity:1; pointer-events:auto; }
+.pay-ap-sheet{
+  width:100%; max-width:480px;
+  background:#fff;
+  border-radius:22px 22px 0 0;
+  padding:18px 18px calc(22px + env(safe-area-inset-bottom));
+  transform:translateY(20px);
+  transition:transform .28s cubic-bezier(.2,.9,.35,1);
+  box-shadow:0 -20px 60px rgba(0,0,0,.22);
+}
+.pay-ap-overlay.open .pay-ap-sheet{ transform:translateY(0); }
+.pay-ap-handle{
+  width:44px; height:5px; background:#DDD;
+  border-radius:3px;
+  margin:0 auto 14px;
+}
+.pay-ap-head{
+  display:flex; align-items:center; justify-content:space-between;
+  padding-bottom:12px;
+  border-bottom:1px solid rgba(0,0,0,.06);
+  margin-bottom:12px;
+}
+.pay-ap-head b{ font-size:15px; font-weight:800; color:#0C1512; }
+.pay-ap-head .ap-close{
+  width:28px; height:28px; border-radius:50%;
+  background:#F0F0F0; border:0; color:#0C1512;
+  display:flex; align-items:center; justify-content:center;
+  cursor:pointer; font-size:15px; font-weight:900;
+}
+.pay-ap-row{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:12px 0;
+  border-bottom:1px solid rgba(0,0,0,.06);
+  font-size:13px;
+}
+.pay-ap-row:last-of-type{ border-bottom:0; }
+.pay-ap-row .apr-k{ color:#5B6B65; font-weight:700; }
+.pay-ap-row .apr-v{ color:#0C1512; font-weight:800; text-align:end; }
+.pay-ap-row.total .apr-v{ color:#0A6B54; font-size:16px; font-weight:900; }
+.pay-ap-confirm{
+  margin-top:14px;
+  padding:14px;
+  background:#000; color:#fff;
+  border:0; border-radius:14px;
+  font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display',system-ui,sans-serif;
+  font-weight:700; font-size:15px;
+  width:100%;
+  cursor:pointer;
+  transition:transform .1s ease;
+  display:flex; align-items:center; justify-content:center; gap:8px;
+}
+.pay-ap-confirm:active{ transform:scale(.98); }
+.pay-ap-note{
+  margin-top:10px;
+  font-size:11px; color:#5B6B65; text-align:center; line-height:1.65;
+}
+
 /* ---- Small screens ------------------------------------------------------ */
 @media (max-width:520px){
   .bkc-title{ font-size:20px; }
-  .bks{ padding:16px; border-radius:18px; }
-  .bk-cta{ min-width:0; flex:1; padding:14px 18px; }
+  .bks{ padding:15px; border-radius:16px; }
+  .bk-cta{ min-width:0; flex:1; padding:14px 16px; font-size:14px; }
   .rcal-day{ min-height:40px; font-size:13px; }
+  .pay-summary{ padding:14px; }
+  .pay-summary .pay-sum-total{ font-size:22px; }
 }
 
-/* Prevent horizontal overflow at any width. */
 html, body{ overflow-x:hidden; }
