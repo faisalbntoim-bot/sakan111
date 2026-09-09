@@ -93,6 +93,14 @@ struct PropertyDetailView: View {
             header(p)
             specs(p)
             actions(p)
+            // "ادخل العقار" — renders as EmptyView when every feature flag is off,
+            // so existing property-detail layout is unchanged for standard builds.
+            EnterPropertyButton(
+                property: p,
+                hasGaussianSplat: (p.model3D?.format == .gaussianSplatPly || p.model3D?.format == .gaussianSplatKS),
+                hasPanorama:      (p.tour?.rooms.isEmpty == false),
+                hasARAnchor:      true
+            )
             summarySection
             dealScoreSection
             features(p)

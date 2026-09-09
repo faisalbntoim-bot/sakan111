@@ -39,6 +39,8 @@ import adminReportRoutes from './routes/admin.reports.js';
 import beneficiaryRoutes from './routes/beneficiaries.js';
 import complaintRoutes from './routes/complaints.js';
 import mediaRoutes from './routes/media.js';
+import mediaProcessingRoutes from './routes/media.processing.js';
+import tourRoutes from './routes/tours.js';
 import adminPropertyRoutes from './routes/admin.properties.js';
 
 export async function buildServer() {
@@ -101,6 +103,8 @@ export async function buildServer() {
   await app.register(beneficiaryRoutes);
   await app.register(complaintRoutes);
   await app.register(mediaRoutes);
+  await app.register(mediaProcessingRoutes);
+  await app.register(tourRoutes);
   await app.register(adminPropertyRoutes);
 
   app.setErrorHandler((err, req, reply) => {

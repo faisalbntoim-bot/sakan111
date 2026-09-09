@@ -16,48 +16,49 @@ datasource db {
 // =========================================================================
 
 model User {
-  id           String   @id @default(cuid())
-  phone        String   @unique                    // E.164
-  email        String?  @unique
-  nameAr       String
-  nameEn       String?
-  status       String   @default("active")         // active | suspended | closed
+  id            String    @id @default(cuid())
+  phone         String    @unique // E.164
+  email         String?   @unique
+  nameAr        String
+  nameEn        String?
+  status        String    @default("active") // active | suspended | closed
   pdplConsentAt DateTime?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
-  roles                Role[]
-  kyc                  Kyc?
-  properties           Property[]         @relation("PropertyOwner")
-  hostedProperties     PropertyHost[]
-  bookingsAsCustomer   Booking[]          @relation("BookingCustomer")
-  beneficiary          Beneficiary?
-  auditLogs            AuditLog[]         @relation("AuditActor")
+  roles              Role[]
+  kyc                Kyc?
+  properties         Property[]     @relation("PropertyOwner")
+  hostedProperties   PropertyHost[]
+  bookingsAsCustomer Booking[]      @relation("BookingCustomer")
+  beneficiary        Beneficiary?
+  auditLogs          AuditLog[]     @relation("AuditActor")
 }
 
 model Role {
-  id      String @id @default(cuid())
-  userId  String
-  role    String                  // HOST | OWNER | OFFICE | MARKETER | CUSTOMER | ADMIN
-  scope   String?                 // optional: officeId, propertyId ...
+  id        String   @id @default(cuid())
+  userId    String
+  role      String // HOST | OWNER | OFFICE | MARKETER | CUSTOMER | ADMIN
+  scope     String? // optional: officeId, propertyId ...
   grantedAt DateTime @default(now())
 
-  user    User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@unique([userId, role, scope])
 }
 
 model Kyc {
-  id           String   @id @default(cuid())
-  userId       String   @unique
-  level        String   @default("NONE")            // NONE | BASIC | FULL
-  documentType String?                              // NATIONAL_ID | IQAMA | CR | PASSPORT
+  id           String    @id @default(cuid())
+  userId       String    @unique
+  level        String    @default("NONE") // NONE | BASIC | FULL
+  documentType String? // NATIONAL_ID | IQAMA | CR | PASSPORT
   documentRef  String?
   provider     String?
   verifiedAt   DateTime?
-  status       String   @default("pending")         // pending | approved | rejected
+  status       String    @default("pending") // pending | approved | rejected
   expiresAt    DateTime?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
@@ -70,14 +71,14 @@ model Kyc {
 model Beneficiary {
   id                    String   @id @default(cuid())
   userId                String   @unique
-  provider              String                       // sandbox | moyasar | tap
-  externalBeneficiaryId String?                      // provider's destination id
+  provider              String // sandbox | moyasar | tap
+  externalBeneficiaryId String? // provider's destination id
   ibanMasked            String?
   payoutEnabled         Boolean  @default(false)
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 
-  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   settlements Settlement[]
 }
 
@@ -86,33 +87,33 @@ model Beneficiary {
 // =========================================================================
 
 model Property {
-  id             String   @id @default(cuid())
-  listingNumber  String   @unique
-  ownerId        String
-  officeId       String?                             // free-form FK reference (Office table optional)
-  category       String                              // apartment | villa | duplex | studio | land | office | shop | farm | commercial | building
-  purpose        String                              // sale | rent | daily | monthly | commercial_rent
-  status         String   @default("available")      // available | reserved | sold | rented | hidden
-  currency       String   @default("SAR")
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id            String   @id @default(cuid())
+  listingNumber String   @unique
+  ownerId       String
+  officeId      String? // free-form FK reference (Office table optional)
+  category      String // apartment | villa | duplex | studio | land | office | shop | farm | commercial | building
+  purpose       String // sale | rent | daily | monthly | commercial_rent
+  status        String   @default("available") // available | reserved | sold | rented | hidden
+  currency      String   @default("SAR")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   // ---- REGA advertisement compliance (nullable — populated when the listing
   //      goes through the SUBMITTED → VERIFIED → PUBLISHED lifecycle) ----
-  advertisementLifecycle String  @default("DRAFT")   // DRAFT | SUBMITTED | VERIFIED | PUBLISHED | EXPIRED | SUSPENDED | REMOVED
-  regaLicenseNumber      String?                     // REGA advertisement licence — visible per REGA rules
+  advertisementLifecycle String    @default("DRAFT") // DRAFT | SUBMITTED | VERIFIED | PUBLISHED | EXPIRED | SUSPENDED | REMOVED
+  regaLicenseNumber      String? // REGA advertisement licence — visible per REGA rules
   regaLicenseIssuedAt    DateTime?
   regaLicenseExpiresAt   DateTime?
   regaSubmittedAt        DateTime?
   regaVerifiedAt         DateTime?
-  regaVerifiedByUserId   String?                     // admin who confirmed
+  regaVerifiedByUserId   String? // admin who confirmed
   regaSuspendedAt        DateTime?
   regaSuspendReason      String?
-  regaComplianceRef      String?                     // opaque external reference
+  regaComplianceRef      String? // opaque external reference
 
-  owner  User          @relation("PropertyOwner", fields: [ownerId], references: [id])
-  hosts  PropertyHost[]
-  bookings Booking[]
+  owner      User           @relation("PropertyOwner", fields: [ownerId], references: [id])
+  hosts      PropertyHost[]
+  bookings   Booking[]
   complaints Complaint[]
 
   @@index([ownerId])
@@ -128,17 +129,17 @@ model Property {
 /// We NEVER store the raw national-id here — only the provider's opaque
 /// reference and the outcome.
 model AdvertiserVerification {
-  id            String   @id @default(cuid())
-  userId        String
-  provider      String                              // nafath | elm | manual
-  externalRef   String?                             // opaque; NEVER the raw ID
-  documentType  String?                             // national_id | iqama | cr
-  status        String   @default("pending")        // pending | verified | rejected | expired
-  verifiedAt    DateTime?
-  expiresAt     DateTime?
+  id              String    @id @default(cuid())
+  userId          String
+  provider        String // nafath | elm | manual
+  externalRef     String? // opaque; NEVER the raw ID
+  documentType    String? // national_id | iqama | cr
+  status          String    @default("pending") // pending | verified | rejected | expired
+  verifiedAt      DateTime?
+  expiresAt       DateTime?
   rejectionReason String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   @@index([userId, status])
   @@index([status, expiresAt])
@@ -150,21 +151,21 @@ model AdvertiserVerification {
 
 model Complaint {
   id             String    @id @default(cuid())
-  complainantId  String?                            // nullable — anonymous complaints allowed
+  complainantId  String? // nullable — anonymous complaints allowed
   propertyId     String?
   bookingId      String?
   category       String    @default("advertisement") // advertisement | payment | conduct | other
   description    String
-  status         String    @default("open")          // open | in_review | resolved | dismissed
+  status         String    @default("open") // open | in_review | resolved | dismissed
   adminNotes     String?
   resolution     String?
   resolvedAt     DateTime?
   resolvedById   String?
-  attachmentRefs String?                             // JSON array of MediaAsset ids
+  attachmentRefs String? // JSON array of MediaAsset ids
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  property       Property? @relation(fields: [propertyId], references: [id])
+  property Property? @relation(fields: [propertyId], references: [id])
 
   @@index([status, createdAt])
   @@index([propertyId])
@@ -175,50 +176,129 @@ model Complaint {
 // =========================================================================
 
 model MediaAsset {
-  id            String   @id @default(cuid())
-  ownerUserId   String                              // whoever uploaded it
-  propertyId    String?
-  kind          String                              // image | video | document
-  provider      String                              // sandbox | s3 | r2
-  providerKey   String                              // object key on the provider (opaque)
-  mimeType      String
-  sizeBytes     Int
-  sha256        String                              // client-computed integrity
-  visibility    String   @default("private")        // private | public
-  createdAt     DateTime @default(now())
+  id          String   @id @default(cuid())
+  ownerUserId String // whoever uploaded it
+  propertyId  String?
+  kind        String // image | video | document
+  provider    String // sandbox | s3 | r2
+  providerKey String // object key on the provider (opaque)
+  mimeType    String
+  sizeBytes   Int
+  sha256      String // client-computed integrity
+  visibility  String   @default("private") // private | public
+  createdAt   DateTime @default(now())
+
+  processingJobs MediaProcessingJob[]
 
   @@index([ownerUserId])
   @@index([propertyId])
 }
 
+// =========================================================================
+// PROPERTY MEDIA — "ادخل العقار" (Enter Property) subsystem
+// Additive tables. NOT wired to payment/booking/REGA flows.
+// All feature-flag gated at the route layer.
+// =========================================================================
+
+/// Tracks upload + downstream processing (thumbnail, panorama stitch,
+/// gaussian splat conversion). `uploadStatus` and `processingStatus`
+/// are deliberately SEPARATE — the upload lifecycle and any downstream
+/// GPU/AI job are independent state machines.
+model MediaProcessingJob {
+  id           String @id @default(cuid())
+  mediaAssetId String
+  ownerUserId  String // denormalised for cheap ownership checks
+  jobType      String // gaussian_splat | panorama_stitch | thumbnail | ai_tour
+
+  // Upload lifecycle (client → storage)
+  uploadStatus     String @default("pending") // pending | uploading | uploaded | failed
+  // Processing lifecycle (external service — may never run)
+  processingStatus String @default("not_requested") // not_requested | queued | processing | ready | failed | archived
+
+  providerJobId String? // external processing service reference (opaque)
+  errorMessage  String?
+  outputAssetId String? // MediaAsset id produced by processing (e.g. .splat file)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  mediaAsset MediaAsset @relation(fields: [mediaAssetId], references: [id], onDelete: Cascade)
+
+  @@index([mediaAssetId])
+  @@index([ownerUserId])
+  @@index([uploadStatus])
+  @@index([processingStatus])
+}
+
+/// A virtual/AR/3D tour attached to a Property. Ownership is enforced by
+/// ownerUserId on write; the route layer verifies the caller owns the
+/// property (or is an admin) before create/update/publish.
+model PropertyTour {
+  id              String    @id @default(cuid())
+  propertyId      String
+  ownerUserId     String // property owner at creation time; write-once
+  tourType        String // panorama_360 | gaussian_splat | virtual_walkthrough | ai_tour
+  status          String    @default("draft") // draft | processing | ready | published | archived
+  primaryAssetId  String? // MediaAsset id (splat/panorama)
+  processingJobId String? // MediaProcessingJob id (if any)
+  title           String?
+  descriptionAr   String?
+  descriptionEn   String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  publishedAt     DateTime?
+
+  hotspots TourHotspot[]
+
+  @@index([propertyId])
+  @@index([ownerUserId])
+  @@index([status])
+  @@index([propertyId, status])
+}
+
+/// Optional navigation hotspots for a panorama_360 tour (later — kept
+/// simple for MVP: label + JSON-encoded position).
+model TourHotspot {
+  id           String   @id @default(cuid())
+  tourId       String
+  label        String
+  targetTourId String? // click-to-navigate target
+  positionJson String // {"yaw":..,"pitch":..} or {"x":..,"y":..,"z":..}
+  createdAt    DateTime @default(now())
+
+  tour PropertyTour @relation(fields: [tourId], references: [id], onDelete: Cascade)
+
+  @@index([tourId])
+}
+
 model PropertyHost {
-  id          String   @id @default(cuid())
-  propertyId  String
-  hostId      String
-  isPrimary   Boolean  @default(false)
+  id         String  @id @default(cuid())
+  propertyId String
+  hostId     String
+  isPrimary  Boolean @default(false)
 
   property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   host     User     @relation(fields: [hostId], references: [id], onDelete: Cascade)
+
   @@unique([propertyId, hostId])
 }
 
 model Booking {
-  id                  String   @id @default(cuid())
+  id                  String    @id @default(cuid())
   propertyId          String
   customerId          String
-  hostId              String                       // host who receives funds (for DAILY_RENTAL)
+  hostId              String // host who receives funds (for DAILY_RENTAL)
   officeId            String?
   marketerId          String?
-  transactionType     String                       // DAILY_RENTAL | LONG_TERM_RENTAL | COMMERCIAL_RENTAL | SALE
+  transactionType     String // DAILY_RENTAL | LONG_TERM_RENTAL | COMMERCIAL_RENTAL | SALE
   checkIn             DateTime?
   checkOut            DateTime?
   nights              Int?
-  grossAmountHalalahs BigInt                       // total item amount BEFORE platform fee & tax
-  currency            String   @default("SAR")
-  status              String   @default("draft")   // draft | pending_payment | confirmed | cancelled | completed
-  idempotencyKey      String?  @unique
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  grossAmountHalalahs BigInt // total item amount BEFORE platform fee & tax
+  currency            String    @default("SAR")
+  status              String    @default("draft") // draft | pending_payment | confirmed | cancelled | completed
+  idempotencyKey      String?   @unique
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
   confirmedAt         DateTime?
 
   property Property @relation(fields: [propertyId], references: [id])
@@ -230,13 +310,13 @@ model Booking {
 }
 
 model BookingItem {
-  id                 String  @id @default(cuid())
-  bookingId          String
-  kind               String                       // NIGHTLY | CLEANING | SERVICE_FEE | DISCOUNT
-  amountHalalahs     BigInt
-  quantity           Int     @default(1)
-  taxable            Boolean @default(false)
-  description        String?
+  id             String  @id @default(cuid())
+  bookingId      String
+  kind           String // NIGHTLY | CLEANING | SERVICE_FEE | DISCOUNT
+  amountHalalahs BigInt
+  quantity       Int     @default(1)
+  taxable        Boolean @default(false)
+  description    String?
 
   booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
 }
@@ -246,22 +326,22 @@ model BookingItem {
 // =========================================================================
 
 model CommissionRule {
-  id                  String   @id @default(cuid())
-  transactionType     String                       // DAILY_RENTAL | LONG_TERM_RENTAL | COMMERCIAL_RENTAL | SALE | ADVERTISEMENT | SUBSCRIPTION | SERVICE
-  propertyType        String?                      // optional refinement
-  platformPercentage  Float?                       // 0..100 (nullable if flat fee)
-  minimumFeeHalalahs  BigInt?
-  maximumFeeHalalahs  BigInt?
-  officePercentage    Float?                       // share OF platform fee going to office (default 0)
-  marketerPercentage  Float?
-  currency            String   @default("SAR")
-  priority            Int      @default(100)       // lower wins
-  effectiveFrom       DateTime @default(now())
-  effectiveTo         DateTime?
-  active              Boolean  @default(true)
-  createdBy           String?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  id                 String    @id @default(cuid())
+  transactionType    String // DAILY_RENTAL | LONG_TERM_RENTAL | COMMERCIAL_RENTAL | SALE | ADVERTISEMENT | SUBSCRIPTION | SERVICE
+  propertyType       String? // optional refinement
+  platformPercentage Float? // 0..100 (nullable if flat fee)
+  minimumFeeHalalahs BigInt?
+  maximumFeeHalalahs BigInt?
+  officePercentage   Float? // share OF platform fee going to office (default 0)
+  marketerPercentage Float?
+  currency           String    @default("SAR")
+  priority           Int       @default(100) // lower wins
+  effectiveFrom      DateTime  @default(now())
+  effectiveTo        DateTime?
+  active             Boolean   @default(true)
+  createdBy          String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   @@index([transactionType, propertyType, active])
 }
@@ -271,30 +351,30 @@ model CommissionRule {
 // =========================================================================
 
 model TaxRule {
-  id              String   @id @default(cuid())
-  serviceType     String                          // RENTAL_RESIDENTIAL | RENTAL_COMMERCIAL | PLATFORM_FEE | BROKERAGE | ADVERTISEMENT | SUBSCRIPTION | SALE
+  id              String    @id @default(cuid())
+  serviceType     String // RENTAL_RESIDENTIAL | RENTAL_COMMERCIAL | PLATFORM_FEE | BROKERAGE | ADVERTISEMENT | SUBSCRIPTION | SALE
   transactionType String?
-  ratePercent     Float                           // 0..100
-  taxable         Boolean  @default(true)
-  reasonCode      String?                          // e.g. "SA_VAT_RESIDENTIAL_EXEMPT"
-  effectiveFrom   DateTime @default(now())
+  ratePercent     Float // 0..100
+  taxable         Boolean   @default(true)
+  reasonCode      String? // e.g. "SA_VAT_RESIDENTIAL_EXEMPT"
+  effectiveFrom   DateTime  @default(now())
   effectiveTo     DateTime?
-  active          Boolean  @default(true)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  active          Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   @@index([serviceType, transactionType, active])
 }
 
 model TaxRecord {
-  id                    String  @id @default(cuid())
+  id                    String   @id @default(cuid())
   paymentId             String?
   bookingId             String?
   serviceType           String
   taxableAmountHalalahs BigInt
   ratePercent           Float
   taxAmountHalalahs     BigInt
-  taxStatus             String                    // applied | exempt | not_applicable
+  taxStatus             String // applied | exempt | not_applicable
   taxReason             String?
   createdAt             DateTime @default(now())
 
@@ -306,23 +386,23 @@ model TaxRecord {
 // =========================================================================
 
 model Payment {
-  id                    String   @id @default(cuid())
-  bookingId             String?
-  subscriptionId        String?
-  advertisementId       String?
-  type                  String                       // CHARGE | REFUND | PAYOUT | ADJUSTMENT
-  grossAmountHalalahs   BigInt
-  currency              String   @default("SAR")
-  status                String   @default("pending") // pending | captured | failed | refunded | partial_refunded | cancelled
-  provider              String                       // sandbox | moyasar | tap
-  providerPaymentId     String?  @unique             // dedup by provider id
-  providerStatus        String?
-  gatewayFeeHalalahs    BigInt   @default(0)
-  idempotencyKey        String   @unique
-  metadata              String?                      // JSON string
-  createdAt             DateTime @default(now())
-  capturedAt            DateTime?
-  updatedAt             DateTime @updatedAt
+  id                  String    @id @default(cuid())
+  bookingId           String?
+  subscriptionId      String?
+  advertisementId     String?
+  type                String // CHARGE | REFUND | PAYOUT | ADJUSTMENT
+  grossAmountHalalahs BigInt
+  currency            String    @default("SAR")
+  status              String    @default("pending") // pending | captured | failed | refunded | partial_refunded | cancelled
+  provider            String // sandbox | moyasar | tap
+  providerPaymentId   String?   @unique // dedup by provider id
+  providerStatus      String?
+  gatewayFeeHalalahs  BigInt    @default(0)
+  idempotencyKey      String    @unique
+  metadata            String? // JSON string
+  createdAt           DateTime  @default(now())
+  capturedAt          DateTime?
+  updatedAt           DateTime  @updatedAt
 
   booking       Booking?       @relation(fields: [bookingId], references: [id])
   events        PaymentEvent[]
@@ -335,25 +415,25 @@ model Payment {
 }
 
 model PaymentEvent {
-  id           String   @id @default(cuid())
-  paymentId    String
-  kind         String                       // created | authorized | captured | failed | refunded | webhook.received
-  data         String                       // JSON string
-  createdAt    DateTime @default(now())
+  id        String   @id @default(cuid())
+  paymentId String
+  kind      String // created | authorized | captured | failed | refunded | webhook.received
+  data      String // JSON string
+  createdAt DateTime @default(now())
 
-  payment      Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
 }
 
 model WebhookEvent {
-  id                 String   @id @default(cuid())
-  provider           String
-  externalEventId    String                    // provider-supplied id (used for dedup)
-  eventType          String
-  signatureVerified  Boolean  @default(false)
-  processed          Boolean  @default(false)
-  payload            String                    // raw JSON string
-  receivedAt         DateTime @default(now())
-  processedAt        DateTime?
+  id                String    @id @default(cuid())
+  provider          String
+  externalEventId   String // provider-supplied id (used for dedup)
+  eventType         String
+  signatureVerified Boolean   @default(false)
+  processed         Boolean   @default(false)
+  payload           String // raw JSON string
+  receivedAt        DateTime  @default(now())
+  processedAt       DateTime?
 
   @@unique([provider, externalEventId])
   @@index([processed])
@@ -365,10 +445,10 @@ model WebhookEvent {
 
 model Account {
   id          String   @id @default(cuid())
-  code        String   @unique                // e.g. "PLATFORM_REVENUE", "VAT_PAYABLE", "HOST_PAYABLE:userId"
+  code        String   @unique // e.g. "PLATFORM_REVENUE", "VAT_PAYABLE", "HOST_PAYABLE:userId"
   name        String
-  ownerUserId String?                          // set for per-user accounts (host payable, etc.)
-  type        String                          // asset | liability | equity | revenue | expense
+  ownerUserId String? // set for per-user accounts (host payable, etc.)
+  type        String // asset | liability | equity | revenue | expense
   currency    String   @default("SAR")
   createdAt   DateTime @default(now())
 
@@ -379,19 +459,19 @@ model Account {
 
 /// Immutable double-entry ledger. To reverse a transaction, insert offsetting entries.
 model LedgerEntry {
-  id               String   @id @default(cuid())
-  transactionRef   String                       // logical grouping (e.g. payment.id)
-  accountId        String
-  debitHalalahs    BigInt   @default(0)
-  creditHalalahs   BigInt   @default(0)
-  currency         String   @default("SAR")
-  paymentId        String?
-  bookingId        String?
-  refundId         String?
-  description      String?
-  createdAt        DateTime @default(now())
+  id             String   @id @default(cuid())
+  transactionRef String // logical grouping (e.g. payment.id)
+  accountId      String
+  debitHalalahs  BigInt   @default(0)
+  creditHalalahs BigInt   @default(0)
+  currency       String   @default("SAR")
+  paymentId      String?
+  bookingId      String?
+  refundId       String?
+  description    String?
+  createdAt      DateTime @default(now())
 
-  account Account @relation(fields: [accountId], references: [id])
+  account Account  @relation(fields: [accountId], references: [id])
   payment Payment? @relation(fields: [paymentId], references: [id])
 
   @@index([transactionRef])
@@ -403,37 +483,37 @@ model LedgerEntry {
 // =========================================================================
 
 model Refund {
-  id                    String   @id @default(cuid())
-  paymentId             String
-  amountHalalahs        BigInt
-  currency              String   @default("SAR")
-  reason                String?
-  status                String   @default("pending")  // pending | processing | completed | failed | cancelled
-  provider              String
-  providerRefundId      String?
-  idempotencyKey        String   @unique
-  createdBy             String?
-  createdAt             DateTime @default(now())
-  completedAt           DateTime?
+  id               String    @id @default(cuid())
+  paymentId        String
+  amountHalalahs   BigInt
+  currency         String    @default("SAR")
+  reason           String?
+  status           String    @default("pending") // pending | processing | completed | failed | cancelled
+  provider         String
+  providerRefundId String?
+  idempotencyKey   String    @unique
+  createdBy        String?
+  createdAt        DateTime  @default(now())
+  completedAt      DateTime?
 
   payment Payment @relation(fields: [paymentId], references: [id])
 }
 
 model Settlement {
-  id                 String   @id @default(cuid())
-  paymentId          String
-  beneficiaryId      String
-  amountHalalahs     BigInt
-  currency           String   @default("SAR")
-  status             String   @default("PENDING") // PENDING | ELIGIBLE | PROCESSING | PAID | FAILED | CANCELLED
-  scheduledAt        DateTime?
-  processedAt        DateTime?
-  providerReference  String?  @unique
-  failureReason      String?
-  retryCount         Int      @default(0)
-  lastRetryAt        DateTime?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  id                String    @id @default(cuid())
+  paymentId         String
+  beneficiaryId     String
+  amountHalalahs    BigInt
+  currency          String    @default("SAR")
+  status            String    @default("PENDING") // PENDING | ELIGIBLE | PROCESSING | PAID | FAILED | CANCELLED
+  scheduledAt       DateTime?
+  processedAt       DateTime?
+  providerReference String?   @unique
+  failureReason     String?
+  retryCount        Int       @default(0)
+  lastRetryAt       DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   payment     Payment     @relation(fields: [paymentId], references: [id])
   beneficiary Beneficiary @relation(fields: [beneficiaryId], references: [id])
@@ -451,7 +531,7 @@ model Invoice {
   invoiceNumber         String   @unique
   bookingId             String?  @unique
   paymentId             String?  @unique
-  sellerName            String                       // SakanHub or Host — depends on the invoice kind
+  sellerName            String // SakanHub or Host — depends on the invoice kind
   sellerVatNumber       String?
   buyerName             String
   buyerVatNumber        String?
@@ -462,9 +542,9 @@ model Invoice {
   totalHalalahs         BigInt
   currency              String   @default("SAR")
   issueDate             DateTime @default(now())
-  status                String   @default("issued")  // draft | issued | credited | cancelled
-  pdfRef                String?                       // opaque object-storage key
-  xmlRef                String?                       // ZATCA UBL XML key
+  status                String   @default("issued") // draft | issued | credited | cancelled
+  pdfRef                String? // opaque object-storage key
+  xmlRef                String? // ZATCA UBL XML key
   createdAt             DateTime @default(now())
 
   booking Booking? @relation(fields: [bookingId], references: [id])
@@ -476,31 +556,31 @@ model Invoice {
 // =========================================================================
 
 model AdProduct {
-  id           String   @id @default(cuid())
-  code         String   @unique                     // NORMAL | FEATURED | PREMIUM | VIP
-  nameAr       String
-  nameEn       String?
+  id            String   @id @default(cuid())
+  code          String   @unique // NORMAL | FEATURED | PREMIUM | VIP
+  nameAr        String
+  nameEn        String?
   priceHalalahs BigInt
-  currency     String   @default("SAR")
-  durationDays Int
-  taxable      Boolean  @default(true)
-  active       Boolean  @default(true)
-  updatedAt    DateTime @updatedAt
+  currency      String   @default("SAR")
+  durationDays  Int
+  taxable       Boolean  @default(true)
+  active        Boolean  @default(true)
+  updatedAt     DateTime @updatedAt
 }
 
 model Advertisement {
-  id              String    @id @default(cuid())
-  propertyId      String
-  buyerUserId     String
-  productCode     String                            // FK by code to AdProduct
-  priceHalalahs   BigInt
-  taxHalalahs     BigInt   @default(0)
-  totalHalalahs   BigInt
-  currency        String   @default("SAR")
-  activeFrom      DateTime?
-  activeUntil     DateTime?
-  status          String   @default("pending")      // pending | active | expired | cancelled
-  createdAt       DateTime @default(now())
+  id            String    @id @default(cuid())
+  propertyId    String
+  buyerUserId   String
+  productCode   String // FK by code to AdProduct
+  priceHalalahs BigInt
+  taxHalalahs   BigInt    @default(0)
+  totalHalalahs BigInt
+  currency      String    @default("SAR")
+  activeFrom    DateTime?
+  activeUntil   DateTime?
+  status        String    @default("pending") // pending | active | expired | cancelled
+  createdAt     DateTime  @default(now())
 
   @@index([propertyId])
 }
@@ -510,29 +590,29 @@ model Advertisement {
 // =========================================================================
 
 model SubscriptionPlan {
-  id             String  @id @default(cuid())
-  code           String  @unique                   // INDIVIDUAL | MARKETER | OFFICE | ENTERPRISE
-  nameAr         String
-  nameEn         String?
+  id              String   @id @default(cuid())
+  code            String   @unique // INDIVIDUAL | MARKETER | OFFICE | ENTERPRISE
+  nameAr          String
+  nameEn          String?
   monthlyHalalahs BigInt
   yearlyHalalahs  BigInt
-  trialDays      Int     @default(0)
-  taxable        Boolean @default(true)
-  active         Boolean @default(true)
-  updatedAt      DateTime @updatedAt
+  trialDays       Int      @default(0)
+  taxable         Boolean  @default(true)
+  active          Boolean  @default(true)
+  updatedAt       DateTime @updatedAt
 }
 
 model Subscription {
-  id            String   @id @default(cuid())
-  userId        String
-  planCode      String
-  billingCycle  String                          // monthly | yearly
-  status        String   @default("trialing")   // trialing | active | past_due | cancelled | expired
-  startedAt     DateTime @default(now())
+  id               String    @id @default(cuid())
+  userId           String
+  planCode         String
+  billingCycle     String // monthly | yearly
+  status           String    @default("trialing") // trialing | active | past_due | cancelled | expired
+  startedAt        DateTime  @default(now())
   currentPeriodEnd DateTime?
-  cancelledAt   DateTime?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  cancelledAt      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   @@index([userId, status])
 }
@@ -542,30 +622,31 @@ model Subscription {
 // =========================================================================
 
 model AuditLog {
-  id         String   @id @default(cuid())
-  actorId    String?
-  action     String                              // PAYMENT.CAPTURED, RULE.UPDATED, ...
-  entity     String
-  entityId   String
-  before     String?
-  after      String?
-  ip         String?
-  createdAt  DateTime @default(now())
+  id        String   @id @default(cuid())
+  actorId   String?
+  action    String // PAYMENT.CAPTURED, RULE.UPDATED, ...
+  entity    String
+  entityId  String
+  before    String?
+  after     String?
+  ip        String?
+  createdAt DateTime @default(now())
 
   actor User? @relation("AuditActor", fields: [actorId], references: [id])
+
   @@index([entity, entityId])
 }
 
 /// Idempotency store: a client sends `Idempotency-Key`; we memoise the response
 /// for a short window so retries return the same result without double-charge.
 model IdempotencyKey {
-  key         String   @id
-  scope       String                              // route:body-hash
-  requestHash String
+  key          String    @id
+  scope        String // route:body-hash
+  requestHash  String
   responseJson String?
-  status      String   @default("in_flight")     // in_flight | completed | failed
-  createdAt   DateTime @default(now())
-  completedAt DateTime?
+  status       String    @default("in_flight") // in_flight | completed | failed
+  createdAt    DateTime  @default(now())
+  completedAt  DateTime?
 
   @@index([scope])
 }
@@ -577,15 +658,15 @@ model IdempotencyKey {
 /// One-time code challenges. `codeHash` = sha256(salt + code); never store the code itself.
 /// Rate-limit is enforced per phone by counting recent unconsumed challenges.
 model OtpChallenge {
-  id            String   @id @default(cuid())
-  phone         String                                // E.164 (+9665…)
-  codeHash      String                                // sha256(salt + code) as hex
-  salt          String                                // hex, 16 bytes
-  attempts      Int      @default(0)
-  maxAttempts   Int      @default(5)
-  expiresAt     DateTime
-  consumedAt    DateTime?
-  createdAt     DateTime @default(now())
+  id          String    @id @default(cuid())
+  phone       String // E.164 (+9665…)
+  codeHash    String // sha256(salt + code) as hex
+  salt        String // hex, 16 bytes
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(5)
+  expiresAt   DateTime
+  consumedAt  DateTime?
+  createdAt   DateTime  @default(now())
 
   @@index([phone, createdAt])
   @@index([expiresAt])
@@ -593,15 +674,15 @@ model OtpChallenge {
 
 /// Refresh tokens are stored hashed; rotation revokes the previous one.
 model RefreshToken {
-  id            String   @id @default(cuid())
-  userId        String
-  tokenHash     String   @unique                     // sha256(refreshToken) hex
-  parentId      String?                              // previous token in a rotation chain
-  userAgent     String?
-  ip            String?
-  expiresAt     DateTime
-  revokedAt     DateTime?
-  createdAt     DateTime @default(now())
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique // sha256(refreshToken) hex
+  parentId  String? // previous token in a rotation chain
+  userAgent String?
+  ip        String?
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
 
   @@index([userId, revokedAt])
 }
