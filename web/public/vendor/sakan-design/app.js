@@ -378,6 +378,10 @@
     guestsAdults:2, guestsChildren:0, guestsInfants:0, guestsPets:0,
     guestsSheetOpen:false,
     priceBreakdownOpen:false,
+    /* New stepped booking sheet (dates → guests → pay) */
+    bookSheetOpen:false, bookStep:'dates', bookPayMethod:'apple',
+    /* Market pulse — favourite neighbourhoods + interest broadcast */
+    favHoods:[], interestBroadcasts:0,
     editOpen:false, editIdx:null, editMode:'edit',
     dealsTab:'all', dealsOrigin:'all', galleryOpen:false, galleryIdx:0,
     dmOpen:false, dmIdx:0, dmThread:[], dmDraft:'', dmTyping:false, mktAsk:'',
@@ -670,6 +674,33 @@
     },
     openGuests(){ setState({guestsSheetOpen:true}); },
     closeGuests(){ setState({guestsSheetOpen:false}); },
+    /* New stepped booking sheet actions */
+    openBookSheet(){ setState({bookSheetOpen:true, bookStep:'dates'}); },
+    closeBookSheet(){ setState({bookSheetOpen:false}); },
+    goBookStep(k){ setState({bookStep:k}); },
+    setPayMethod(k){ setState({bookPayMethod:k}); },
+    confirmBookPay(){
+      const p=properties[state.detailIdx]||properties[0];
+      const nights=(state.calSelStart!==null&&state.calSelEnd!==null)?(state.calSelEnd-state.calSelStart):0;
+      if(!nights){ showToast('اختر التواريخ أولاً'); return; }
+      const method = state.bookPayMethod;
+      const label = method==='apple'?'Apple Pay':method==='mada'?'مدى':'بطاقة ائتمان';
+      showToast('✅ تم تأكيد الحجز · الدفع بـ ' + label + ' (نموذج توضيحي)');
+      setState({bookSheetOpen:false});
+    },
+    /* Market pulse — favourite neighbourhoods */
+    toggleFavHood(h){
+      const cur = state.favHoods || [];
+      const next = cur.includes(h) ? cur.filter(x=>x!==h) : [...cur, h];
+      setState({favHoods: next});
+    },
+    broadcastInterest(){
+      const n = (state.favHoods||[]).length;
+      if(!n){ showToast('اختر حياً واحداً على الأقل من الخريطة'); return; }
+      const count = 12 + Math.floor(Math.random()*40);
+      setState({interestBroadcasts: state.interestBroadcasts + 1});
+      showToast(`📣 تم إرسال اهتمامك لـ ${count} مالكاً/مسوّقاً في ${n} أحياء مختارة`);
+    },
     incGuests(k){
       const cur = state['guests'+k.charAt(0).toUpperCase()+k.slice(1)] || 0;
       const caps = { adults:16, children:10, infants:5, pets:3 };
@@ -685,18 +716,9 @@
     togglePriceBreakdown(){ setState({priceBreakdownOpen:!state.priceBreakdownOpen}); },
     payApplePay(){ showToast('🍎 Apple Pay — تكامل الدفع الفعلي عبر مزوّد مرخّص. نسخة توضيحية.'); },
     bookFromGallery(){
-      // Close the gallery, put the current property in daily mode, and
-      // reset the calendar so the user starts from a clean picker.
-      // The detail view's calendar is the booking widget: it computes
-      // nights → subtotal → cleaning → service → VAT → total, and the
-      // pay button opens the payment methods sheet. This action just
-      // brings the user to that widget.
-      setState({galleryOpen:false, rentalMode:'daily', calSelStart:null, calSelEnd:null});
-      // Scroll the calendar block into view after the paint tick.
-      setTimeout(()=>{
-        const cal=document.querySelector('.daily-perks, .daily-price-row, .cal-grid');
-        if(cal && cal.scrollIntoView) cal.scrollIntoView({behavior:'smooth', block:'start'});
-      }, 60);
+      // Close the gallery and immediately open the stepped booking
+      // sheet — no more inline scrolling / page-overlap issues.
+      setState({galleryOpen:false, rentalMode:'daily', bookSheetOpen:true, bookStep:'dates'});
     },
     setAnnualMonths(k){
       // Read the date picker first so it survives the re-render.
@@ -1484,7 +1506,26 @@
         </div>
         <div style="display:${!annual?'':'none'}">
           ${(function(){
-            // ---- New airbnb-style daily booking sheet ----
+            // Slim daily-price strip. The full booking flow now lives in
+            // a stepped bottom sheet (bookSheetV2Html) opened by the
+            // "احجز الآن" CTA below — this removes the page-overlap
+            // that came from having the whole booking widget inline.
+            return `<div class="book-strip">
+              <div class="bs-tx">
+                <div class="bs-price"><b>${nfA(p.dailyRate)}</b> <small>ر.س / ليلة</small></div>
+                <div class="bs-badge">${moonIcon(12)} إيجار يومي · إلغاء مجاني قبل ٤٨ ساعة</div>
+              </div>
+              <button class="bs-cta" data-act="openBookSheet">
+                <span>احجز الآن</span>
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 6l-6 6 6 6"/></svg>
+              </button>
+            </div>`;
+          })()}
+        </div>
+        <div style="display:none">
+          ${(function(){
+            // ---- Legacy inline book-v2 (kept commented-out via display:none
+            //      wrapper) — content moved into bookSheetV2Html modal.
             // Layout: dates row → guests row → total row (tap to expand)
             //         → free cancellation → payment section → pay CTAs.
             const f = o => { const d=new Date(today.getTime()+o*864e5); return d.getDate()+' '+calMonthNames[d.getMonth()]; };
@@ -1756,6 +1797,173 @@
         <button class="cta primary" style="width:100%;opacity:${ready?1:.55}" data-act="confirmBooking">✅ تأكيد حجز الموعد</button>
       </div>`;
   }
+  /* --- Stepped booking sheet: dates → guests → payment ---
+     Airbnb-style progressive disclosure. Each step is a full-width
+     panel; a small progress dots bar shows the current step. Next
+     is disabled until the step's minimum data is set. --- */
+  function bookSheetV2Html(){
+    const p = properties[state.detailIdx] || properties[0];
+    const today = new Date();
+    const startPad = today.getDay();
+    const calMonthNames=['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+    const calWd=['أحد','إثنين','ثلاثاء','أربعاء','خميس','جمعة','سبت'];
+    const weekHead = calWd.map(d=>`<div class="cal-wd">${d}</div>`).join('');
+    let pad=''; for(let i=0;i<startPad;i++) pad+='<div class="cal-day pad"></div>';
+    let days='';
+    for(let off=0;off<30;off++){
+      const day=new Date(today); day.setDate(today.getDate()+off);
+      const num=day.getDate();
+      const isBooked=(p.booked||[]).includes(off);
+      const inRange=(state.calSelStart!=null && state.calSelEnd!=null && off>state.calSelStart && off<state.calSelEnd);
+      const isStart=off===state.calSelStart, isEnd=off===state.calSelEnd;
+      const cls=[isBooked?'booked':'','avail',(isStart||isEnd)?'sel':'',inRange?'range':''].filter(Boolean).join(' ');
+      days += `<button class="cal-day ${cls}" ${isBooked?'disabled':`data-act="pickDay" data-off="${off}"`}>${num}</button>`;
+    }
+
+    const nights = (state.calSelStart!=null && state.calSelEnd!=null) ? (state.calSelEnd-state.calSelStart) : 0;
+    const staySubtotal = nights * p.dailyRate;
+    const dService = Math.round(staySubtotal*0.12), dVat = Math.round(dService*0.15);
+    const dTotal = staySubtotal + p.cleaning + dService + dVat;
+
+    const gA=state.guestsAdults||1, gC=state.guestsChildren||0, gI=state.guestsInfants||0, gP=state.guestsPets||0;
+    const guestsSummary = (function(){
+      const parts=[`${nfA(gA)} بالغ`];
+      if(gC) parts.push(`${nfA(gC)} أطفال`);
+      if(gI) parts.push(`${nfA(gI)} رضّع`);
+      if(gP) parts.push(`${nfA(gP)} حيوان`);
+      return parts.join(' · ');
+    })();
+    const f = o => { const d=new Date(today.getTime()+o*864e5); return d.getDate()+' '+calMonthNames[d.getMonth()]; };
+    const arr = state.calSelStart!=null ? f(state.calSelStart) : 'اختر';
+    const dep = state.calSelEnd!=null ? f(state.calSelEnd) : 'اختر';
+
+    const step = state.bookStep || 'dates';
+    const dot = k => `<span class="bsv2-dot ${k===step?'on':''} ${(k==='dates'&&nights>0)||(k==='guests'&&(step==='guests'||step==='pay'))||(k==='pay'&&step==='pay')?'done':''}"></span>`;
+    const stepTitles = {dates:'اختر التواريخ', guests:'كم شخصاً؟', pay:'راجع وادفع'};
+
+    const grow = (k, title, sub) => {
+      const val = state['guests'+k.charAt(0).toUpperCase()+k.slice(1)] || 0;
+      const floor = k==='adults' ? 1 : 0;
+      const dis = val <= floor ? 'disabled' : '';
+      return `<div class="grow">
+        <div class="grow-tx"><b>${esc(title)}</b>${sub?`<small>${esc(sub)}</small>`:''}</div>
+        <div class="grow-ctrls">
+          <button class="grow-btn" data-act="decGuests" data-key="${esc(k)}" ${dis} aria-label="نقصان">−</button>
+          <span class="grow-n">${nfA(val)}</span>
+          <button class="grow-btn" data-act="incGuests" data-key="${esc(k)}" aria-label="زيادة">+</button>
+        </div>
+      </div>`;
+    };
+
+    const payMethod = state.bookPayMethod || 'apple';
+    const payRow = (k, node) => `<button class="pmv2 ${payMethod===k?'on':''}" data-act="setPayMethod" data-key="${k}">${node}</button>`;
+
+    // Sheet header — brand + close.
+    const header = `<div class="bsv2-head">
+      <div class="bsv2-title">
+        <b>${esc(stepTitles[step])}</b>
+        <div class="bsv2-dots">${dot('dates')}${dot('guests')}${dot('pay')}</div>
+      </div>
+      <button class="close" data-act="closeBookSheet">✕</button>
+    </div>`;
+
+    // Property mini-summary top-of-sheet
+    const propMini = `<div class="bsv2-prop">
+      <div class="bsv2-prop-thumb" style="background-image:url('${galleryFor(p, state.detailIdx)[0].src}')"></div>
+      <div class="bsv2-prop-tx">
+        <b>${esc(p.type)} · ${esc(p.neighborhood)}</b>
+        <small>${nfA(p.dailyRate)} ر.س / ليلة · ⭐ ${nfA(p.rating)}</small>
+      </div>
+    </div>`;
+
+    // Step 1: dates
+    const datesPanel = `<div class="bsv2-panel ${step==='dates'?'on':''}">
+      ${propMini}
+      <div class="bsv2-cal-summary">
+        <div class="bcs-cell"><small>الوصول</small><b>${esc(arr)}</b></div>
+        <div class="bcs-arrow">←</div>
+        <div class="bcs-cell"><small>المغادرة</small><b>${esc(dep)}</b></div>
+      </div>
+      <div class="bsv2-cal">
+        <div class="cal-head"><span>${calMonthNames[today.getMonth()]} ${today.getFullYear()}</span><span class="cal-legend"><i class="dotL g"></i> متاح <i class="dotL gray" style="margin-inline-start:8px"></i> محجوز</span></div>
+        <div class="cal-weekdays">${weekHead}</div>
+        <div class="cal-grid">${pad}${days}</div>
+        <div class="nights-pill ${nights>0?'on':''}">${nights>0?`${moonIcon(12)} ${nights} ليالٍ`:`${moonIcon(12)} اختر الوصول ثم المغادرة`}</div>
+      </div>
+      <button class="bsv2-next ${nights>0?'':'disabled'}" data-act="goBookStep" data-key="guests" ${nights>0?'':'disabled'}>
+        متابعة إلى الضيوف
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M14 6l-6 6 6 6"/></svg>
+      </button>
+    </div>`;
+
+    // Step 2: guests
+    const guestsPanel = `<div class="bsv2-panel ${step==='guests'?'on':''}">
+      ${propMini}
+      <div class="bsv2-note">من سيقيم معك؟ نستخدم هذا لعرض شروط المضيف المناسبة.</div>
+      <div class="guests-list">
+        ${grow('adults', 'البالغون', '١٣ سنة فأكثر')}
+        ${grow('children', 'الأطفال', 'من ٢ إلى ١٢ سنة')}
+        ${grow('infants', 'الرضّع', 'أقل من ٢ سنة')}
+        ${grow('pets', 'الحيوانات الأليفة', 'يمكن رفض بعض الأنواع')}
+      </div>
+      <div class="bsv2-btns">
+        <button class="bsv2-back" data-act="goBookStep" data-key="dates">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M10 6l6 6-6 6"/></svg>
+          رجوع
+        </button>
+        <button class="bsv2-next" data-act="goBookStep" data-key="pay">
+          راجع وادفع
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M14 6l-6 6 6 6"/></svg>
+        </button>
+      </div>
+    </div>`;
+
+    // Step 3: pay
+    const payPanel = `<div class="bsv2-panel ${step==='pay'?'on':''}">
+      ${propMini}
+      <div class="bsv2-review">
+        <div class="brv-row"><span>📅 التواريخ</span><b>${esc(arr)} → ${esc(dep)}</b></div>
+        <div class="brv-row"><span>👥 الضيوف</span><b>${esc(guestsSummary)}</b></div>
+        <div class="brv-row"><span>🌙 الليالي</span><b>${nfA(nights)} ليالٍ</b></div>
+      </div>
+      <div class="bsv2-breakdown">
+        <div class="pb-row"><span>${nfA(nights)} × ${nfA(p.dailyRate)} ر.س</span><span>${nfA(staySubtotal)} ر.س</span></div>
+        <div class="pb-row"><span>رسوم التنظيف</span><span>${nfA(p.cleaning)} ر.س</span></div>
+        <div class="pb-row"><span>رسوم خدمة سكن هوب (12%)</span><span>${nfA(dService)} ر.س</span></div>
+        <div class="pb-row"><span>ضريبة القيمة المضافة 15%</span><span>${nfA(dVat)} ر.س</span></div>
+        <div class="pb-row total"><span>الإجمالي</span><span>${nfA(dTotal)} ر.س</span></div>
+      </div>
+      <div class="bsv2-cancel">✅ إلغاء مجاني قبل ٤٨ ساعة من الوصول</div>
+      <div class="bsv2-pay-title">اختر طريقة الدفع</div>
+      <div class="bsv2-pay-methods">
+        ${payRow('apple', `<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M17.2 12.3c0-1.9 1.6-2.9 1.7-2.9-1-1.4-2.4-1.6-2.9-1.6-1.2-.1-2.4.7-3 .7-.6 0-1.6-.7-2.6-.7-1.3 0-2.6.8-3.2 2-1.4 2.4-.4 6 1 8 .7.9 1.4 2 2.4 1.9 1-.1 1.3-.6 2.5-.6s1.5.6 2.6.6 1.7-.9 2.3-1.8c.7-1 1-2 1-2.1 0 0-1.9-.8-2.3-2.8zM15.3 6.4c.5-.7.9-1.6.8-2.5-.8 0-1.8.5-2.4 1.2-.5.6-1 1.5-.8 2.4.9.1 1.8-.4 2.4-1.1z"/></svg><span>Apple Pay</span>`)}
+        ${payRow('mada', `<span class="mada-lbl">مدى</span>`)}
+        ${payRow('card', `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 9.5h19M6 15h4"/></svg><span>بطاقة ائتمان</span>`)}
+      </div>
+      <div class="bsv2-btns">
+        <button class="bsv2-back" data-act="goBookStep" data-key="guests">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M10 6l6 6-6 6"/></svg>
+          رجوع
+        </button>
+        <button class="bsv2-confirm" data-act="confirmBookPay">
+          ✓ تأكيد الحجز · ادفع ${nfA(dTotal)} ر.س
+        </button>
+      </div>
+    </div>`;
+
+    return `
+      <div class="sheet-overlay above ${state.bookSheetOpen?'open':''}" data-act="closeBookSheet"></div>
+      <div class="sheet above book-sheet-v2 ${state.bookSheetOpen?'open':''}">
+        <div class="sheet-handle"></div>
+        ${header}
+        <div class="bsv2-body">
+          ${datesPanel}
+          ${guestsPanel}
+          ${payPanel}
+        </div>
+      </div>`;
+  }
+
   function guestsSheetHtml(){
     // Bottom sheet with per-guest-type +/- controls.
     const row = (k, title, sub) => {
@@ -1790,11 +1998,30 @@
   function tourHtml(){
     const p=properties[state.detailOpen?state.detailIdx:0]||properties[0];
     const g=galleryFor(p,state.detailIdx);
-    return `<div class="tour ${state.tourOpen?'open':''}">
-      <div class="tour-img" style="background-image:url('${g[0].src}')"></div>
-      <div class="tour-grad"></div>
-      <div class="tour-top"><span class="tour-live">🟢 جولة افتراضية 360°</span><button class="gal-close" data-act="closeTour">✕</button></div>
-      <div class="tour-hint"><span class="th-spin">🔄</span> اسحب لتدور داخل الغرفة</div>
+    // 360-tour v2: wider background image + pointer-driven parallax pan.
+    // We layer TWO copies of the image side-by-side and translate the
+    // container on pointer-drag → gives a convincing panorama feel
+    // without needing WebGL / Three.js. Honest note: this is a visual
+    // simulation, not a spherical projection (that requires a real
+    // 360 asset + gsplat/panolens); switching to a real equirectangular
+    // renderer is a one-line drop-in when a proper asset exists.
+    return `<div class="tour v2 ${state.tourOpen?'open':''}">
+      <div class="tour-pan" id="tourPan">
+        <div class="tour-img wide" style="background-image:url('${g[0].src}')"></div>
+      </div>
+      <div class="tour-vignette"></div>
+      <div class="tour-shimmer"></div>
+      <div class="tour-top">
+        <span class="tour-live"><span class="tl-dot"></span> جولة افتراضية ٣٦٠°</span>
+        <button class="gal-close" data-act="closeTour">✕</button>
+      </div>
+      <div class="tour-compass" aria-hidden="true">
+        <div class="tc-ring"></div><div class="tc-needle"></div>
+        <span class="tc-n">شمال</span>
+      </div>
+      <div class="tour-hint">
+        <span class="th-drag">↔</span> اسحب أفقياً لتدور داخل الغرفة
+      </div>
       <div class="tour-rooms">${['المجلس','المطبخ','غرفة النوم','الإطلالة'].map((r,i)=>`<span class="tr-chip ${i===0?'on':''}">${r}</span>`).join('')}</div>
     </div>`;
   }
@@ -2398,6 +2625,72 @@
           <div class="mh2-range"><span>أدنى ٥٢أ <b>٣٩٨</b></span><span>أعلى ٥٢أ <b>٤٣٦</b></span><span>التذبذب <b>منخفض</b></span></div>
         </div>
         <div class="mkt-updated"><span>آخر تحديث ١٠:٤٥ص</span><span class="mu-src">المصدر: ٣٬٢٠٠ صفقة موثّقة</span></div>
+
+        ${(function(){
+          // --- Favourite neighbourhoods + interest broadcast ---
+          // Real value-add: the user picks the districts they care about,
+          // sees live match counts, and can broadcast an "interested"
+          // signal to owners/marketers active in those districts.
+          const hoods=[...new Set(properties.map(p=>p.neighborhood))];
+          const fav = state.favHoods || [];
+          const cnt = h => properties.filter(p=>p.neighborhood===h).length;
+          const priceRange = h => {
+            const arr=properties.filter(p=>p.neighborhood===h && p.price).map(p=>p.price);
+            if(!arr.length) return '—';
+            return `${nfA(Math.min(...arr))} - ${nfA(Math.max(...arr))} ر.س`;
+          };
+          const totalMatches = fav.reduce((s,h)=>s+cnt(h), 0);
+          return `<div class="off-section-title">أحياءك المفضّلة <span class="sec-hint">اختر الأحياء ليصلك جديدها</span></div>
+          <div class="favhoods-card">
+            <div class="fh-map">
+              <svg viewBox="0 0 320 140" width="100%" height="140" fill="none" preserveAspectRatio="none">
+                <defs>
+                  <linearGradient id="fhBg" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0" stop-color="#EEFBF5"/>
+                    <stop offset="1" stop-color="#D8F5EC"/>
+                  </linearGradient>
+                </defs>
+                <rect width="320" height="140" fill="url(#fhBg)" rx="14"/>
+                <!-- stylised Riyadh grid -->
+                <path d="M0 40 Q80 20 160 45 T320 40" stroke="rgba(14,124,102,.18)" stroke-width="1.2" fill="none"/>
+                <path d="M0 78 Q80 100 160 82 T320 80" stroke="rgba(14,124,102,.14)" stroke-width="1.2" fill="none"/>
+                <path d="M0 110 Q80 130 160 115 T320 110" stroke="rgba(14,124,102,.10)" stroke-width="1.2" fill="none"/>
+                ${hoods.slice(0,7).map((h,i)=>{
+                  const x=30+(i*40)%280, y=30+((i*47)%80);
+                  const on=fav.includes(h);
+                  return `<g transform="translate(${x},${y})">
+                    <circle r="${on?9:6}" fill="${on?'#0E7C66':'#FFFFFF'}" stroke="#0E7C66" stroke-width="2"/>
+                    ${on?`<circle r="3" fill="#FFFFFF"/>`:''}
+                  </g>`;
+                }).join('')}
+              </svg>
+              <div class="fh-map-legend">💡 اضغط الحي لإضافته/إزالته من المفضّلة</div>
+            </div>
+            <div class="fh-chips">
+              ${hoods.map(h=>{
+                const on=fav.includes(h);
+                return `<button class="fh-chip ${on?'on':''}" data-act="toggleFavHood" data-key="${esc(h)}">
+                  <span class="fh-dot"></span>
+                  <span class="fh-tx"><b>${esc(h)}</b><small>${nfA(cnt(h))} عرض · ${esc(priceRange(h))}</small></span>
+                  <span class="fh-check">✓</span>
+                </button>`;
+              }).join('')}
+            </div>
+            <div class="fh-summary">
+              <div class="fh-stats">
+                <div class="fhs-item"><b>${nfA(fav.length)}</b><small>حي مفضّل</small></div>
+                <div class="fhs-item"><b>${nfA(totalMatches)}</b><small>عرض مطابق</small></div>
+                <div class="fhs-item"><b>${nfA(state.interestBroadcasts||0)}</b><small>مرة نُشرت</small></div>
+              </div>
+              <button class="fh-broadcast" data-act="broadcastInterest">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l18-8v18l-18-8v-2z"/><circle cx="12" cy="12" r="2"/></svg>
+                <span>أرسل اهتمامي — أخبر المالكين/المسوّقين</span>
+              </button>
+              <div class="fh-hint">✨ عند الإرسال، يظهر طلبك في قائمة مالكي ومسوّقي هذه الأحياء ويصلك جديدهم فوراً</div>
+            </div>
+          </div>`;
+        })()}
+
         <div class="off-section-title">نبض السوق اليوم</div>
         <div class="mkt-activity">
           <div class="mact rented"><span class="mact-ic">${statIconSvg('key')}</span><b>١٤٢</b><small>تأجّر اليوم</small><span class="mact-chg up">▲ ٨٪</span></div>
@@ -3487,6 +3780,7 @@
       ${reqsPageHtml()}
       ${bookingHtml()}
       ${guestsSheetHtml()}
+      ${bookSheetV2Html()}
       ${tourHtml()}
       ${captureHtml()}
       ${officesHtml()}
@@ -4051,6 +4345,35 @@
     }
     // واجهة عامة نظيفة للتوسعة لاحقًا (GLB، أراضٍ متعددة، قياس، أثاث...)
     return { open, close, cfg, model, _internals:{ bearing, distM, landCorners } };
+  })();
+
+  // ---- Tour drag-to-pan (delegated once at document level) ---------------
+  // Attaches pointer handlers ONCE. Because renders replace #tourPan
+  // wholesale, we re-bind on every mousedown by looking up the element.
+  (function bindTourPan(){
+    let panX = 0, dragging=false, startX=0, startPan=0, el=null;
+    const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+    document.addEventListener('pointerdown', (e)=>{
+      const target = e.target.closest('.tour-pan .tour-img');
+      if(!target) return;
+      el = e.target.closest('.tour-pan');
+      dragging=true; startX=e.clientX; startPan=panX;
+      el.setPointerCapture && el.setPointerCapture(e.pointerId);
+    });
+    document.addEventListener('pointermove', (e)=>{
+      if(!dragging || !el) return;
+      // Panorama width is 2× viewport → allowed pan range is ±viewport width.
+      const w = el.clientWidth || 320;
+      panX = clamp(startPan + (e.clientX - startX), -w, w);
+      const img = el.querySelector('.tour-img.wide');
+      if(img) img.style.transform = `translateX(${panX}px)`;
+      // Rotate compass needle in sync (map ±w → ±180°).
+      const compass = el.parentElement && el.parentElement.querySelector('.tc-needle');
+      if(compass) compass.style.transform = `translate(-50%,-100%) rotate(${(panX/w)*180}deg)`;
+    });
+    const stop = ()=>{ dragging=false; el=null; };
+    document.addEventListener('pointerup', stop);
+    document.addEventListener('pointercancel', stop);
   })();
 
   // ---- Admin-secret bootstrap ------------------------------------------
