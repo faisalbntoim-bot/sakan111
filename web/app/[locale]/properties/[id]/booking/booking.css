@@ -4,7 +4,23 @@
    token, same rounded cards. No phone-frame chrome, no fake status
    bar — the booking screen is a natural continuation of the property
    details page the user came from.
+
+   OUTER SHELL CONTINUITY:
+   The SPA (public/vendor/sakan-design/styles.css) sets the app-wide
+   ground to `--ink:#0F1E18` and centres its content in a 480px column
+   with a deep drop-shadow. When the user leaves /ar → /booking, we
+   MUST keep the same dark backdrop or the transition reads as leaving
+   the app. This block therefore overrides globals.css's cream `body`
+   for the entire booking segment (the segment stylesheet loads only
+   here, so /ar and the marketing site are untouched).
    ========================================================================== */
+
+html, body {
+  background: #0F1E18 !important;
+  min-height: 100dvh;
+  margin: 0;
+  overflow-x: hidden;
+}
 
 /* Shared design tokens — mirror the SPA :root exactly so the booking
    flow can never drift visually from the property page. */
@@ -35,9 +51,9 @@
   padding-bottom:calc(100px + env(safe-area-inset-bottom));
   position:relative;
 }
-@media (min-width:520px){
-  .bkw{ box-shadow:0 0 60px rgba(0,0,0,.30); }
-}
+/* Match SPA .app shadow exactly so the 480px column feels welded to
+   the same dark backdrop the user came from. */
+.bkw{ box-shadow: 0 0 60px rgba(0,0,0,.5); }
 .bkw *{ box-sizing:border-box; }
 /* Force headings to match the SPA — Tajawal, tight letter-spacing. */
 .bkw h1, .bkw h2, .bkw h3, .bkw .bkc-title, .bkw .bks-title{
@@ -786,4 +802,12 @@ html, body{ overflow-x:hidden; }
   text-align:center;
   padding:2px 4px 0;
   font-size:10.5px; color:var(--bk-text-dim); line-height:1.65;
+}
+
+/* ---- Review sheet: methods title + method chips inline --------------- */
+.brs-methods-title{
+  margin:12px 4px 6px;
+  font-size:11px; font-weight:800;
+  color:var(--bk-text-dim);
+  letter-spacing:.4px; text-transform:uppercase;
 }

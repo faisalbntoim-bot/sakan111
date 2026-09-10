@@ -66,6 +66,10 @@ export default function BookingPage({ params }: { params: { locale: string; id: 
     infants: 0,
   }));
   const [reviewOpen, setReviewOpen] = useState(false);
+  // Payment method + inline-pay lives in the review Bottom Sheet so the
+  // whole flow stays on this one route — no /pay redirect.
+  const [payMethod, setPayMethod] = useState<'mada'|'apple'|'card'|'stc'>('mada');
+  const [payBusy, setPayBusy] = useState(false);
 
   useEffect(() => {
     setState(readBooking(params.id, mode));
@@ -389,12 +393,57 @@ export default function BookingPage({ params }: { params: { locale: string; id: 
               <div className="brs-row"><span className="brs-k">الضيوف</span><span className="brs-v">{guestsSummary}</span></div>
               <div className="brs-row total"><span className="brs-k">الإجمالي</span><span className="brs-v">{nfA(stickyTotal)} ر.س</span></div>
             </div>
+
+            {/* Inline payment method picker — no separate /pay page.
+                Real Moyasar / Apple Pay integration is honestly stubbed
+                until the merchant identifier + hosted checkout are wired. */}
+            <div className="brs-methods-title">طريقة الدفع</div>
+            <div className="pay-methods-v3" role="radiogroup" aria-label="طريقة الدفع">
+              {([
+                { k: 'mada' as const,  label: 'مدى' },
+                { k: 'apple' as const, label: 'Apple Pay' },
+                { k: 'card' as const,  label: 'بطاقة' },
+                { k: 'stc' as const,   label: 'STC Pay' },
+              ]).map((m) => (
+                <button
+                  key={m.k}
+                  type="button"
+                  role="radio"
+                  aria-checked={payMethod === m.k}
+                  className={`pm-v3 ${payMethod === m.k ? 'on' : ''}`}
+                  onClick={() => setPayMethod(m.k)}
+                >
+                  <span className={`pm-v3-ic pm-v3-${m.k}`} aria-hidden="true">
+                    {m.k === 'apple' && (
+                      <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true">
+                        <path d="M17.2 12.3c0-1.9 1.6-2.9 1.7-2.9-1-1.4-2.4-1.6-2.9-1.6-1.2-.1-2.4.7-3 .7-.6 0-1.6-.7-2.6-.7-1.3 0-2.6.8-3.2 2-1.4 2.4-.4 6 1 8 .7.9 1.4 2 2.4 1.9 1-.1 1.3-.6 2.5-.6s1.5.6 2.6.6 1.7-.9 2.3-1.8c.7-1 1-2 1-2.1 0 0-1.9-.8-2.3-2.8zM15.3 6.4c.5-.7.9-1.6.8-2.5-.8 0-1.8.5-2.4 1.2-.5.6-1 1.5-.8 2.4.9.1 1.8-.4 2.4-1.1z"/>
+                      </svg>
+                    )}
+                    {m.k === 'mada' && <span className="pm-v3-mada-lbl">مدى</span>}
+                    {m.k === 'card' && (
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                        <rect x="2.5" y="5.5" width="19" height="13" rx="2.5"/><path d="M2.5 10h19M6 15h4"/>
+                      </svg>
+                    )}
+                    {m.k === 'stc' && <span className="pm-v3-stc-lbl">STC</span>}
+                  </span>
+                  <span className="pm-v3-tx"><b>{m.label}</b></span>
+                </button>
+              ))}
+            </div>
           </div>
           <button
             className="brs-cta"
-            onClick={() => router.push(`/${params.locale}/properties/${property.id}/booking/pay`)}
+            disabled={payBusy || stickyTotal <= 0}
+            onClick={() => {
+              setPayBusy(true);
+              setTimeout(() => {
+                setPayBusy(false);
+                alert('بوابة الدفع الفعلية عبر مزوّد مرخّص قيد التفعيل. لن يتم خصم أي مبلغ في هذه المرحلة.');
+              }, 550);
+            }}
           >
-            المتابعة إلى الدفع
+            {payBusy ? 'جارٍ التحقق…' : `ادفع ${nfA(stickyTotal)} ر.س`}
           </button>
         </div>
       </div>
