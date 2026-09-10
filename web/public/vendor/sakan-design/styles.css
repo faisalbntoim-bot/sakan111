@@ -7704,3 +7704,35 @@ img{ -webkit-user-drag:none; user-select:none; }
   .market-sheet.mp2 .mp2-deals,
   .market-sheet.mp2 .mp2-summary{ margin-inline:0; padding-inline:12px; }
 }
+
+/* ---- Market pulse: quick filter chips (top of the feed) ---------------- */
+.market-sheet.mp2 .mp2-quick{
+  display:flex;
+  gap:8px;
+  padding:0 16px;
+  margin:0 0 14px;
+  overflow-x:auto;
+  scrollbar-width:none;
+  -webkit-overflow-scrolling:touch;
+}
+.market-sheet.mp2 .mp2-quick::-webkit-scrollbar{ display:none; }
+.market-sheet.mp2 .mp2-q{
+  flex-shrink:0;
+  padding:8px 16px;
+  background:#fff;
+  border:1.5px solid rgba(46,158,119,.16);
+  border-radius:999px;
+  color:#6C7B73;
+  font-family:inherit;
+  font-size:12.5px; font-weight:800;
+  cursor:pointer;
+  transition:background .15s ease, border-color .15s ease, color .15s ease, transform .1s ease;
+}
+.market-sheet.mp2 .mp2-q:hover{ background:#FBFDFB; }
+.market-sheet.mp2 .mp2-q:active{ transform:scale(.96); }
+.market-sheet.mp2 .mp2-q.on{
+  background:linear-gradient(180deg,#2E9E77 0%,#0C4C3A 100%);
+  border-color:#2E9E77;
+  color:#fff;
+  box-shadow:0 3px 10px rgba(46,158,119,.28);
+}

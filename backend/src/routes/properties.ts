@@ -13,10 +13,14 @@
 
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import { config } from '../config.js';
 import { getPrisma } from '../db.js';
 import { getCaller, isAdminRole } from '../auth/rbac.js';
 import { badRequest, notFound } from '../errors.js';
 import { jsonSafe } from '../money.js';
+import { buildPreferenceProfile } from '../recommendation/preferences.js';
+import { computeQualityScore } from '../recommendation/quality.js';
+import { scorePropertyForUser, scorePropertyColdStart } from '../recommendation/scorer.js';
 
 const listQuery = z.object({
   page: z.coerce.number().int().min(1).max(1000).default(1),
@@ -151,5 +155,111 @@ export default async function propertyRoutes(app: FastifyInstance) {
       isAvailable: booked.length === 0,
       bookedRanges: booked,
     };
+  });
+
+  /**
+   * GET /v1/properties/feed — ranked property list.
+   *
+   * When `personalized=true` AND `RECOMMENDATION_ENGINE_ENABLED` is on,
+   * ranks by Recommendation Score V1 (see recommendation/scorer.ts) using
+   * the caller's inferred preference profile. Otherwise falls back to
+   * the existing "updatedAt desc" order — so if the engine ever throws,
+   * the user still gets a valid feed (see try/catch below).
+   */
+  const feedQuery = z.object({
+    page: z.coerce.number().int().min(1).max(1000).default(1),
+    pageSize: z.coerce.number().int().min(1).max(50).default(20),
+    personalized: z.union([z.literal('true'), z.literal('false'), z.boolean()]).optional(),
+  });
+
+  app.get('/v1/properties/feed', async (req) => {
+    const caller = getCaller(req);
+    const q = feedQuery.parse(req.query ?? {});
+    const wantPersonalized =
+      (q.personalized === true || q.personalized === 'true') && config.RECOMMENDATION_ENGINE_ENABLED;
+    const prisma = getPrisma();
+
+    // Base pool — always "available" for the public feed.
+    const where = { status: 'available' as const };
+    // Pull a slightly wider pool than pageSize so ranking has room to reorder.
+    const pool = await prisma.property.findMany({
+      where,
+      orderBy: { updatedAt: 'desc' },
+      take: q.pageSize * 5,
+    });
+
+    if (!wantPersonalized) {
+      const items = pool.slice((q.page - 1) * q.pageSize, q.page * q.pageSize).map(publicProjection);
+      return jsonSafe({
+        items,
+        page: q.page,
+        pageSize: q.pageSize,
+        total: pool.length,
+        ranking: 'default',
+      });
+    }
+
+    try {
+      // Load the last 400 events for this caller (bounded — recency matters more).
+      let profile = { hasSignal: false } as ReturnType<typeof buildPreferenceProfile>;
+      if (caller) {
+        const events = await prisma.userEvent.findMany({
+          where: { userId: caller.userId },
+          orderBy: { createdAt: 'desc' },
+          take: 400,
+          select: { eventType: true, city: true, district: true, propertyType: true, purpose: true, priceHalalahs: true, createdAt: true },
+        });
+        profile = buildPreferenceProfile(events);
+      }
+
+      const now = new Date();
+      const scored = pool.map((p) => {
+        const quality = computeQualityScore({
+          hasCategory: !!p.category,
+          hasPurpose: !!p.purpose,
+          hasListingNumber: !!p.listingNumber,
+          imageCount: 0, // MediaAsset count wiring — deferred (see NOT IMPLEMENTED)
+          advertisementLifecycle: p.advertisementLifecycle,
+          hasRegaLicense: !!p.regaLicenseNumber,
+          createdAt: p.createdAt,
+          now,
+        });
+        const scorable = {
+          id: p.id,
+          category: p.category,
+          purpose: p.purpose,
+          city: null,          // Property lacks city — populated when events tag it
+          district: null,
+          priceHalalahs: null, // Property lacks price — same
+          qualityScore: quality,
+          createdAt: p.createdAt,
+        };
+        const result = profile.hasSignal
+          ? scorePropertyForUser(profile, scorable, now)
+          : scorePropertyColdStart(scorable, now);
+        return { property: p, ...result };
+      });
+
+      scored.sort((a, b) => b.score - a.score);
+      const paged = scored.slice((q.page - 1) * q.pageSize, q.page * q.pageSize);
+      return jsonSafe({
+        items: paged.map(s => ({ ...publicProjection(s.property), _score: s.score, _reasons: s.reasons })),
+        page: q.page,
+        pageSize: q.pageSize,
+        total: scored.length,
+        ranking: profile.hasSignal ? 'personalized' : 'cold_start',
+      });
+    } catch (err) {
+      // Engine failure must NEVER break the user's feed — fall back.
+      req.log.error({ err }, 'recommendation engine failed; falling back to default feed');
+      const items = pool.slice((q.page - 1) * q.pageSize, q.page * q.pageSize).map(publicProjection);
+      return jsonSafe({
+        items,
+        page: q.page,
+        pageSize: q.pageSize,
+        total: pool.length,
+        ranking: 'fallback',
+      });
+    }
   });
 }

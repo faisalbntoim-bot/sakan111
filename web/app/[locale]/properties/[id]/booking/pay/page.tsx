@@ -1,19 +1,19 @@
 'use client';
 
 /**
- * Payment step — Apple Pay-forward UI with mada and card as alternates.
+ * Payment step — SakanHub-native, one screen.
  *
- * We do NOT wire a real payment provider here: real Apple Pay integration
- * needs an Apple merchant identifier, a domain-verified endpoint, and a
- * server session token that a marketing preview cannot produce honestly.
- * Instead this page:
- *   1. Renders a real Apple Pay-styled sheet with the actual booking
- *      totals from sessionStorage (no fake numbers).
- *   2. Shows an Apple Pay confirmation overlay that mimics the iOS
- *      payment sheet with the correct amount and method.
- *   3. Ends with an explicit "قيد التفعيل" message when the user taps
- *      confirm — so nobody thinks a real charge happened.
- * Backend / Moyasar integration lands as a separate task.
+ * Rewritten from the previous "Apple Pay-first" design to fit the app
+ * identity: green primary CTA that always says "ادفع XXX ر.س", method
+ * chips (mada / Apple Pay / Visa / STC Pay) that only change the label
+ * on the CTA. The proprietary Apple Pay black pill only appears if the
+ * user actually taps the Apple Pay method — Apple's brand-guideline
+ * placement, not a default that visually dominates the page.
+ *
+ * We do NOT wire a real payment provider here — real integration needs
+ * a merchant identifier + domain-verified endpoint, which a preview
+ * cannot honestly produce. Tapping pay opens an honest "قيد التفعيل"
+ * confirmation instead of pretending money moved.
  */
 
 import { useEffect, useState } from 'react';
@@ -24,56 +24,44 @@ import {
   nightsBetween,
   computePrice,
   formatArabicDayDate,
+  addMonths,
   nfA,
   type BookingState,
 } from '@/lib/booking-state';
 import { BookingChrome } from '@/components/booking/BookingChrome';
 import { PropertyMiniCard } from '@/components/booking/PropertyMiniCard';
 
-type Method = 'apple' | 'mada' | 'card';
+type Method = 'mada' | 'apple' | 'card' | 'stc';
+
+const ANNUAL_MONTHLY_FROM_DAILY = 30 * 0.55;
+const VAT_RATE = 0.15;
+const SERVICE_FEE_RATE_ANNUAL = 0.05;
 
 export default function BookingPayPage({ params }: { params: { locale: string; id: string } }) {
   const router = useRouter();
   const property = getProperty(params.id);
   const [state, setState] = useState<BookingState | null>(null);
-  const [method, setMethod] = useState<Method>('apple');
-  const [sheetOpen, setSheetOpen] = useState(false);
-  const [confirmed, setConfirmed] = useState(false);
+  const [method, setMethod] = useState<Method>('mada');
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     const s = readBooking(params.id);
-    if (!s.checkIn || !s.checkOut) {
-      router.replace(`/${params.locale}/properties/${params.id}/booking`);
+    if (!s.checkIn || (s.mode === 'daily' && !s.checkOut)) {
+      router.replace(`/${params.locale}/properties/${params.id}/booking?mode=${s.mode}`);
       return;
     }
     setState(s);
   }, [params.id, params.locale, router]);
 
-  // Prevent background scroll while the Apple Pay sheet is open.
-  useEffect(() => {
-    if (sheetOpen) {
-      const prev = document.body.style.overflow;
-      document.body.style.overflow = 'hidden';
-      return () => { document.body.style.overflow = prev; };
-    }
-  }, [sheetOpen]);
-
   if (!property) {
     return (
       <>
         <BookingChrome title="الدفع" fallbackHref={`/${params.locale}`} />
-        <div className="bkp">
-          <div className="bk-missing">
-            <b>لم يتم العثور على هذا العقار</b>
-            <a href={`/${params.locale}`}>العودة للصفحة الرئيسية</a>
-          </div>
-        </div>
+        <div className="bkp"><div className="bk-missing"><b>لم يتم العثور على هذا العقار</b><a href={`/${params.locale}`}>العودة للصفحة الرئيسية</a></div></div>
       </>
     );
   }
-
-  const backHref = `/${params.locale}/properties/${property.id}/booking/review`;
-
+  const backHref = `/${params.locale}/properties/${property.id}/booking?mode=${state?.mode ?? 'daily'}`;
   if (!state) {
     return (
       <>
@@ -83,183 +71,113 @@ export default function BookingPayPage({ params }: { params: { locale: string; i
     );
   }
 
+  const isAnnual = state.mode === 'annual';
   const nights = nightsBetween(state.checkIn, state.checkOut);
-  const price = computePrice(property.dailyRate, nights, property.cleaning);
+  let total = 0;
+  let subLine = '';
+  if (isAnnual && state.checkIn) {
+    const monthlyRate = Math.round(property.dailyRate * ANNUAL_MONTHLY_FROM_DAILY);
+    const subtotal = monthlyRate * state.months;
+    const serviceFee = Math.round(subtotal * SERVICE_FEE_RATE_ANNUAL);
+    const vat = Math.round((subtotal + serviceFee) * VAT_RATE);
+    total = subtotal + serviceFee + vat;
+    subLine = `${formatArabicDayDate(state.checkIn)} → ${formatArabicDayDate(addMonths(state.checkIn, state.months))} · ${nfA(state.months)} شهرًا`;
+  } else if (!isAnnual && nights > 0) {
+    const price = computePrice(property.dailyRate, nights, property.cleaning);
+    total = price.total;
+    subLine = `${formatArabicDayDate(state.checkIn)} → ${formatArabicDayDate(state.checkOut)} · ${nfA(nights)} ليالٍ`;
+  }
 
-  const startPay = () => {
-    if (method === 'apple') {
-      setSheetOpen(true);
-      return;
-    }
-    // mada / card — no real gateway wired.
-    alert('طريقة الدفع هذه قيد التفعيل عبر مزوّد مرخّص. سيتم ربطها لاحقًا.');
-  };
+  const guestsSummary = (() => {
+    const parts: string[] = [`${nfA(state.adults)} بالغ`];
+    if (state.children > 0) parts.push(`${nfA(state.children)} طفل`);
+    if (state.infants > 0) parts.push(`${nfA(state.infants)} رضيع`);
+    return parts.join(' · ');
+  })();
 
-  const confirmApplePay = () => {
-    setConfirmed(true);
-    // Keep the sheet visible for a beat so the user sees the transition,
-    // then reset and inform them honestly that the gateway is pending.
+  const pay = () => {
+    setBusy(true);
+    // Honest stub: brief pause to show the CTA reacting, then a clear
+    // "provider integration pending" message. No fake success screen.
     setTimeout(() => {
-      setSheetOpen(false);
-      setConfirmed(false);
-      alert('تم التحقق من تفاصيل الدفع. تكامل Apple Pay الحقيقي عبر مزوّد مرخّص قيد التفعيل — لن يتم خصم أي مبلغ في هذه المرحلة.');
-    }, 900);
+      setBusy(false);
+      alert('بوابة الدفع الفعلية عبر مزوّد مرخّص قيد التفعيل. لن يتم خصم أي مبلغ.');
+    }, 550);
   };
 
   return (
     <>
       <BookingChrome title="الدفع" fallbackHref={backHref} />
       <main className="bkp">
-        <PropertyMiniCard property={property} />
-
-        <div className="pay-summary">
-          <div className="pay-sum-lbl">
-            <small>إجمالي الدفع</small>
-            <b>{formatArabicDayDate(state.checkIn)} → {formatArabicDayDate(state.checkOut)}</b>
+        {/* Compact summary — property + dates + guests + total in one card. */}
+        <div className="pay-summary-v3">
+          <div className="pay-sv3-head">
+            <PropertyMiniCard property={property} />
           </div>
-          <div className="pay-sum-total">
-            {nfA(price.total)}
-            <small>ر.س</small>
+          <div className="pay-sv3-lines">
+            <div className="pay-sv3-line"><span>{isAnnual ? 'مدة العقد' : 'الإقامة'}</span><b>{subLine || '—'}</b></div>
+            <div className="pay-sv3-line"><span>الضيوف</span><b>{guestsSummary}</b></div>
+            <div className="pay-sv3-line total"><span>الإجمالي</span><b>{nfA(total)} <small>ر.س</small></b></div>
           </div>
         </div>
 
-        <div className="pay-method-title">اختر طريقة الدفع</div>
-        <div className="pay-methods">
-          <button
-            type="button"
-            className={`pay-method ${method === 'apple' ? 'on' : ''}`}
-            onClick={() => setMethod('apple')}
-          >
-            <span className="pm-ic apple" aria-hidden="true">
-              <ApplePayGlyph size={16} />
-            </span>
-            <span className="pm-lbl">
-              <b>Apple Pay</b>
-              <small>الأسرع — Face ID أو Touch ID</small>
-            </span>
-            <span className="pm-check" aria-hidden="true">
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7"/></svg>
-            </span>
-          </button>
-          <button
-            type="button"
-            className={`pay-method ${method === 'mada' ? 'on' : ''}`}
-            onClick={() => setMethod('mada')}
-          >
-            <span className="pm-ic mada" aria-hidden="true">مدى</span>
-            <span className="pm-lbl">
-              <b>بطاقة مدى</b>
-              <small>الشبكة السعودية للمدفوعات</small>
-            </span>
-            <span className="pm-check" aria-hidden="true">
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7"/></svg>
-            </span>
-          </button>
-          <button
-            type="button"
-            className={`pay-method ${method === 'card' ? 'on' : ''}`}
-            onClick={() => setMethod('card')}
-          >
-            <span className="pm-ic card" aria-hidden="true">
-              <svg viewBox="0 0 24 24" width="20" height="14" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="2" y="4" width="20" height="16" rx="3"/><path d="M2 10h20M6 16h5"/></svg>
-            </span>
-            <span className="pm-lbl">
-              <b>بطاقة ائتمان</b>
-              <small>Visa · Mastercard</small>
-            </span>
-            <span className="pm-check" aria-hidden="true">
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7"/></svg>
-            </span>
-          </button>
+        {/* Method picker — chip row, not stacked cards; keeps the page short. */}
+        <div className="pay-methods-v3" role="radiogroup" aria-label="طريقة الدفع">
+          {(
+            [
+              { k: 'mada' as const,  label: 'مدى',       hint: 'الشبكة السعودية' },
+              { k: 'apple' as const, label: 'Apple Pay',  hint: 'Face ID / Touch ID' },
+              { k: 'card' as const,  label: 'بطاقة',      hint: 'Visa · Mastercard' },
+              { k: 'stc' as const,   label: 'STC Pay',    hint: 'محفظة رقمية' },
+            ]
+          ).map((m) => (
+            <button
+              key={m.k}
+              type="button"
+              role="radio"
+              aria-checked={method === m.k}
+              className={`pm-v3 ${method === m.k ? 'on' : ''}`}
+              onClick={() => setMethod(m.k)}
+            >
+              <span className={`pm-v3-ic pm-v3-${m.k}`} aria-hidden="true">
+                {m.k === 'apple' && <ApplePayGlyph size={14} />}
+                {m.k === 'mada' && <span className="pm-v3-mada-lbl">مدى</span>}
+                {m.k === 'card' && <CardIcon size={16} />}
+                {m.k === 'stc' && <span className="pm-v3-stc-lbl">STC</span>}
+              </span>
+              <span className="pm-v3-tx"><b>{m.label}</b><small>{m.hint}</small></span>
+            </button>
+          ))}
         </div>
 
-        <div className="pay-secure">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        {/* Secure line — same visual weight as SPA fine-print. */}
+        <div className="pay-secure-v3">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
             <rect x="4.5" y="10.5" width="15" height="9.5" rx="2"/>
             <path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/>
           </svg>
-          <div>
-            مبلغك محتجز بأمان في ضمان «سكن هوب» ولا يُحوّل للمالك إلا بعد استلامك العقار.
-            الاتصال مشفّر (TLS) ومطابق لمعايير SAMA/PCI.
-          </div>
-        </div>
-
-        <div className="pay-tos">
-          بضغطك على زر الدفع أدناه فأنت توافق على
-          {' '}<a href="#" onClick={(e) => e.preventDefault()}>شروط الحجز</a>{' '}
-          و
-          {' '}<a href="#" onClick={(e) => e.preventDefault()}>سياسة الإلغاء</a>.
+          <span>مبلغك محتجز بأمان في ضمان سكن هوب ولا يُحوّل للمالك إلا بعد استلامك العقار.</span>
         </div>
       </main>
 
+      {/* Sticky CTA — SakanHub green primary, or Apple Pay black pill ONLY
+          when Apple Pay is explicitly the selected method (per brand
+          guidelines). */}
       <div className="bk-sticky">
-        <div className="bk-sticky-inner" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 10 }}>
+        <div className="bk-sticky-inner" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 8 }}>
           {method === 'apple' ? (
-            <button className="pay-cta-ap" onClick={startPay}>
+            <button className="pay-cta-ap-v3" onClick={pay} disabled={busy}>
               <span>ادفع بـ</span>
-              <span className="ap-mark">
-                <span className="ap-glyph"><ApplePayGlyph size={22} /></span>
-                <span>Pay</span>
-              </span>
+              <span className="ap-mark"><span className="ap-glyph"><ApplePayGlyph size={20} /></span><span>Pay</span></span>
+              <span className="ap-amt">· {nfA(total)} ر.س</span>
             </button>
           ) : (
-            <button className="pay-cta-alt" onClick={startPay}>
-              متابعة الدفع · {nfA(price.total)} ر.س
+            <button className="bk-cta pay-cta-primary" onClick={pay} disabled={busy || total <= 0}>
+              {busy ? 'جارٍ التحقق…' : `ادفع ${nfA(total)} ر.س`}
             </button>
           )}
-        </div>
-      </div>
-
-      {/* Apple Pay confirmation sheet */}
-      <div
-        className={`pay-ap-overlay ${sheetOpen ? 'open' : ''}`}
-        onClick={() => !confirmed && setSheetOpen(false)}
-        aria-hidden={!sheetOpen}
-      >
-        <div className="pay-ap-sheet" onClick={(e) => e.stopPropagation()}>
-          <div className="pay-ap-handle" />
-          <div className="pay-ap-head">
-            <b>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                <ApplePayGlyph size={16} />
-                <span> Pay</span>
-              </span>
-              {' · '}تأكيد الدفع
-            </b>
-            <button className="ap-close" onClick={() => !confirmed && setSheetOpen(false)} aria-label="إغلاق">✕</button>
-          </div>
-          <div className="pay-ap-row">
-            <span className="apr-k">إلى</span>
-            <span className="apr-v">سكن هوب — {property.name}</span>
-          </div>
-          <div className="pay-ap-row">
-            <span className="apr-k">البطاقة</span>
-            <span className="apr-v">مدى ···· ٤٥٢١</span>
-          </div>
-          <div className="pay-ap-row total">
-            <span className="apr-k">الإجمالي</span>
-            <span className="apr-v">{nfA(price.total)} ر.س</span>
-          </div>
-          <button
-            className="pay-ap-confirm"
-            onClick={confirmApplePay}
-            disabled={confirmed}
-          >
-            {confirmed ? (
-              <>
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7"/></svg>
-                تم التحقق
-              </>
-            ) : (
-              <>
-                <FaceIdIcon size={18} />
-                تأكيد ببصمة الوجه
-              </>
-            )}
-          </button>
-          <div className="pay-ap-note">
-            هذه شاشة توضيحية بواجهة Apple Pay. لن يتم خصم أي مبلغ حتى يتم ربط
-            بوابة الدفع الفعلية.
+          <div className="pay-tos-v3">
+            بضغطك على زر الدفع فأنت توافق على شروط الحجز وسياسة الإلغاء.
           </div>
         </div>
       </div>
@@ -275,11 +193,11 @@ function ApplePayGlyph({ size }: { size: number }) {
   );
 }
 
-function FaceIdIcon({ size }: { size: number }) {
+function CardIcon({ size }: { size: number }) {
   return (
-    <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M4 9V6a2 2 0 0 1 2-2h3M20 9V6a2 2 0 0 0-2-2h-3M4 15v3a2 2 0 0 0 2 2h3M20 15v3a2 2 0 0 1-2 2h-3"/>
-      <path d="M9 10v1M15 10v1M9.5 15c.7.7 1.6 1 2.5 1s1.8-.3 2.5-1M12 9v4h-1"/>
+    <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+      <rect x="2.5" y="5.5" width="19" height="13" rx="2.5"/>
+      <path d="M2.5 10h19M6 15h4"/>
     </svg>
   );
 }

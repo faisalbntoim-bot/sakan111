@@ -32,6 +32,16 @@ const schema = z.object({
   MAX_REQUEST_BODY_BYTES: z.coerce.number().int().positive().default(100 * 1024),
   /** Optional Sentry DSN. Empty = error tracker is a no-op. Never printed. */
   SENTRY_DSN: z.string().optional().default(''),
+
+  // ---- Recommendation & Market Pulse feature flags (all OFF by default) ----
+  /** Master switch for the /v1/analytics/events endpoint. Off = returns 503. */
+  ANALYTICS_EVENTS_ENABLED: z.coerce.boolean().default(false),
+  /** Ranks GET /v1/properties/feed?personalized=true by Recommendation Score. */
+  RECOMMENDATION_ENGINE_ENABLED: z.coerce.boolean().default(false),
+  /** Enables /v1/market/* routes (returns 503 when off). */
+  MARKET_PULSE_ENABLED: z.coerce.boolean().default(false),
+  /** Minimum event sample size for market pulse growth / trending to be reported. */
+  MARKET_MIN_SAMPLE_SIZE: z.coerce.number().int().min(1).default(30),
 });
 
 export const config = schema.parse(process.env);

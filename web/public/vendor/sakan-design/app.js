@@ -687,11 +687,14 @@
     closeBookSheet(){ setState({bookSheetOpen:false}); },
     /* Navigate to the new booking flow at
        /ar/properties/<idx>/booking. Uses the current detail index as
-       the property id — matches lib/properties.ts ordering. */
+       the property id — matches lib/properties.ts ordering. Passes
+       ?mode=daily|annual so the booking page can pick the right form
+       (calendar range for daily vs start-date + duration for annual). */
     goToBookingRoute(){
       const idx = (typeof state.detailIdx === 'number' ? state.detailIdx : 0);
       const loc = (location.pathname.split('/')[1] === 'en') ? 'en' : 'ar';
-      window.location.href = '/' + loc + '/properties/' + idx + '/booking';
+      const mode = state.rentalMode === 'annual' ? 'annual' : 'daily';
+      window.location.href = '/' + loc + '/properties/' + idx + '/booking?mode=' + mode;
     },
     /* Accordion — toggle a section, collapse the others. Auto-advance:
        when nights become >0, guests opens; when guests set, pay opens. */
@@ -2731,6 +2734,15 @@
         <div class="mp2-intro">
           <h2>نبض السوق</h2>
           <p>تعرّف على حركة السوق والفرص العقارية من مكان واحد.</p>
+        </div>
+
+        <div class="mp2-quick" role="tablist" aria-label="تصفية سريعة">
+          ${[
+            {k:'all',    label:'الكل'},
+            {k:'sale',   label:'بيع'},
+            {k:'rent-y', label:'إيجار'},
+            {k:'daily',  label:'يومي'},
+          ].map(f=>`<button class="mp2-q ${(activeTab==='all'&&f.k==='all')||activeTab===f.k?'on':''}" data-act="setMktMoveTab" data-key="${f.k}" role="tab">${esc(f.label)}</button>`).join('')}
         </div>
 
         <div class="mp2-stats">

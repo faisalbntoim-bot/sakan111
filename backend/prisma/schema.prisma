@@ -605,3 +605,37 @@ model RefreshToken {
 
   @@index([userId, revokedAt])
 }
+
+// =========================================================================
+// RECOMMENDATION & MARKET PULSE — user event stream
+// =========================================================================
+
+/// Append-only stream of user interactions used by:
+///   * Recommendation Engine V1 (deterministic scoring — no ML) to infer
+///     per-user preferences (city / district / property type / price range).
+///   * Market Pulse (deals volume, trending areas, hot properties) via
+///     time-windowed aggregations.
+///
+/// Privacy: `userId` is nullable to allow anonymous session tracking.
+/// `metadata` is a whitelist JSON blob (validated at the route boundary);
+/// NEVER store credentials, OTPs, JWTs, card numbers, or DM content here.
+model UserEvent {
+  id                  String   @id @default(cuid())
+  userId              String?                              // null for anonymous sessions
+  anonymousSessionId  String?                              // opaque, rotated per browser session
+  eventType           String                               // see EVENT_WEIGHTS whitelist
+  propertyId          String?                              // FK-shape (not enforced — event survives property delete)
+  city                String?                              // denormalised for aggregation queries
+  district            String?
+  propertyType        String?                              // apartment | villa | duplex | studio | land | ...
+  purpose             String?                              // sale | rent | daily | ...
+  priceHalalahs       BigInt?                              // denormalised — halalah minor units
+  metadata            String   @default("{}")              // JSON string; whitelist-validated
+  createdAt           DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([anonymousSessionId, createdAt])
+  @@index([propertyId, createdAt])
+  @@index([eventType, createdAt])
+  @@index([city, district, createdAt])
+}

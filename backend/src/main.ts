@@ -40,6 +40,8 @@ import beneficiaryRoutes from './routes/beneficiaries.js';
 import complaintRoutes from './routes/complaints.js';
 import mediaRoutes from './routes/media.js';
 import adminPropertyRoutes from './routes/admin.properties.js';
+import analyticsRoutes from './routes/analytics.js';
+import marketRoutes from './routes/market.js';
 
 export async function buildServer() {
   const app = Fastify({
@@ -102,6 +104,8 @@ export async function buildServer() {
   await app.register(complaintRoutes);
   await app.register(mediaRoutes);
   await app.register(adminPropertyRoutes);
+  await app.register(analyticsRoutes);
+  await app.register(marketRoutes);
 
   app.setErrorHandler((err, req, reply) => {
     // Duck-type on httpStatus so bundler / cross-module identity issues don't

@@ -9,10 +9,14 @@
 // same shape sessionStorage would give in a private/blocked context, so
 // the callers already handle it.
 
+export type BookingMode = 'daily' | 'annual';
+
 export type BookingState = {
   propertyId: string;
-  checkIn: string | null;   // YYYY-MM-DD
-  checkOut: string | null;  // YYYY-MM-DD
+  mode: BookingMode;
+  checkIn: string | null;   // YYYY-MM-DD (daily = arrival, annual = contract start)
+  checkOut: string | null;  // YYYY-MM-DD (daily = departure; annual = derived from months)
+  months: number;           // annual only — contract length (12/24/36)
   adults: number;
   children: number;
   infants: number;
@@ -23,15 +27,18 @@ const VAT_RATE = 0.15;         // 15% Saudi VAT (mirrors SPA)
 
 const keyFor = (id: string) => `sh:booking:${id}`;
 
-export function readBooking(id: string): BookingState {
-  if (typeof window === 'undefined') return blankBooking(id);
+export function readBooking(id: string, mode: BookingMode = 'daily'): BookingState {
+  if (typeof window === 'undefined') return blankBooking(id, mode);
   try {
     const raw = window.sessionStorage.getItem(keyFor(id));
-    if (!raw) return blankBooking(id);
+    if (!raw) return blankBooking(id, mode);
     const parsed = JSON.parse(raw) as Partial<BookingState>;
-    return { ...blankBooking(id), ...parsed, propertyId: id };
+    // If the mode in URL differs from what's stored (e.g. user switched
+    // annual↔daily on the property page), the URL wins so we don't
+    // resurrect stale dates from the other mode.
+    return { ...blankBooking(id, mode), ...parsed, propertyId: id, mode };
   } catch {
-    return blankBooking(id);
+    return blankBooking(id, mode);
   }
 }
 
@@ -44,8 +51,18 @@ export function writeBooking(state: BookingState): void {
   }
 }
 
-export function blankBooking(id: string): BookingState {
-  return { propertyId: id, checkIn: null, checkOut: null, adults: 1, children: 0, infants: 0 };
+export function blankBooking(id: string, mode: BookingMode = 'daily'): BookingState {
+  return { propertyId: id, mode, checkIn: null, checkOut: null, months: 12, adults: 1, children: 0, infants: 0 };
+}
+
+/** Add a month count to a YYYY-MM-DD, returning YYYY-MM-DD. */
+export function addMonths(ymd: string, months: number): string {
+  const d = new Date(ymd + 'T00:00:00');
+  d.setMonth(d.getMonth() + months);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${dd}`;
 }
 
 export function nightsBetween(checkIn: string | null, checkOut: string | null): number {
