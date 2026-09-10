@@ -1,0 +1,197 @@
+/* Admin segment — same SakanHub identity as booking/*.
+   Dark backdrop + 720px centred column (wider than 480px booking to
+   fit the dashboard grids without cramping). */
+
+html, body {
+  background: #0F1E18 !important;
+  min-height: 100dvh;
+  margin: 0;
+  overflow-x: hidden;
+}
+
+.adw {
+  --ad-ink: #0F1E18;
+  --ad-bg: #F3F6F3;
+  --ad-paper: #FFFFFF;
+  --ad-line: #DEE8E1;
+  --ad-text-dim: #6C7B73;
+  --ad-accent: #2E9E77;
+  --ad-accent-deep: #0C4C3A;
+  --ad-warn: #B2422E;
+  --ad-warn-low: #D9A652;
+
+  min-height: 100dvh;
+  max-width: 720px;
+  margin: 0 auto;
+  background: var(--ad-bg);
+  color: var(--ad-ink);
+  font-family: 'IBM Plex Sans Arabic', 'SF Arabic', 'Tajawal', 'Segoe UI', system-ui, -apple-system, Tahoma, sans-serif;
+  padding-bottom: 40px;
+  box-shadow: 0 0 60px rgba(0, 0, 0, .5);
+}
+.adw * { box-sizing: border-box; }
+
+/* ---- Chrome ------------------------------------------------------- */
+.ad-chrome {
+  position: sticky; top: 0; z-index: 20;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 18px;
+  background: rgba(243, 246, 243, .94);
+  backdrop-filter: saturate(1.2) blur(10px);
+  -webkit-backdrop-filter: saturate(1.2) blur(10px);
+  border-bottom: 1px solid rgba(46, 158, 119, .12);
+}
+.ad-chrome .ad-title {
+  font-family: 'Tajawal', system-ui, sans-serif;
+  font-weight: 900; font-size: 18px; color: var(--ad-accent-deep);
+  letter-spacing: -.2px;
+}
+.ad-chrome .ad-title small {
+  display: block; font-size: 11px; font-weight: 700;
+  color: var(--ad-text-dim); margin-top: 2px;
+  font-family: 'IBM Plex Sans Arabic', system-ui, sans-serif;
+}
+.ad-chrome .ad-back {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 12px;
+  background: #fff;
+  border: 1px solid var(--ad-line);
+  border-radius: 10px;
+  color: var(--ad-ink); text-decoration: none;
+  font-size: 12.5px; font-weight: 700;
+}
+
+/* ---- Container ---------------------------------------------------- */
+.ad-container { padding: 14px 16px; display: flex; flex-direction: column; gap: 14px; }
+.ad-section-title {
+  margin: 6px 0 -4px;
+  font-family: 'Tajawal', system-ui, sans-serif;
+  font-size: 15px; font-weight: 900; color: var(--ad-accent-deep);
+  padding: 0 2px;
+}
+.ad-section-title small { color: var(--ad-text-dim); font-size: 11px; font-weight: 700; margin-inline-start: 6px; }
+
+/* Period pills */
+.ad-periods { display: flex; gap: 6px; padding: 0 2px; }
+.ad-period {
+  flex: 1;
+  padding: 8px 10px;
+  border: 1.5px solid var(--ad-line);
+  background: #fff; color: var(--ad-text-dim);
+  border-radius: 999px;
+  font-family: inherit; font-weight: 800; font-size: 12px;
+  cursor: pointer;
+  transition: background .15s ease, border-color .15s ease, color .15s ease, transform .1s ease;
+}
+.ad-period:hover { background: #FBFDFB; }
+.ad-period:active { transform: scale(.96); }
+.ad-period.on {
+  background: linear-gradient(180deg, var(--ad-accent) 0%, var(--ad-accent-deep) 100%);
+  border-color: var(--ad-accent); color: #fff;
+  box-shadow: 0 3px 10px rgba(46, 158, 119, .28);
+}
+
+/* Stat grid */
+.ad-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+@media (min-width: 520px) { .ad-grid { grid-template-columns: repeat(3, 1fr); } }
+@media (min-width: 720px) { .ad-grid { grid-template-columns: repeat(4, 1fr); } }
+
+.ad-stat {
+  background: #fff;
+  border: 1px solid var(--ad-line);
+  border-radius: 14px;
+  padding: 12px;
+  display: flex; flex-direction: column; gap: 3px;
+}
+.ad-stat .ad-s-k {
+  font-size: 11px; font-weight: 700; color: var(--ad-text-dim);
+  letter-spacing: .2px;
+}
+.ad-stat .ad-s-v {
+  font-family: 'Tajawal', system-ui, sans-serif;
+  font-size: 20px; font-weight: 900; color: var(--ad-ink);
+  line-height: 1.1;
+}
+.ad-stat .ad-s-v small { font-size: 11px; color: var(--ad-text-dim); font-weight: 700; margin-inline-start: 3px; }
+.ad-stat .ad-s-v.ad-null { color: var(--ad-text-dim); font-size: 14px; }
+
+/* Card wrapper for sub-sections */
+.ad-card {
+  background: #fff;
+  border: 1px solid var(--ad-line);
+  border-radius: 16px;
+  padding: 14px;
+}
+.ad-card h3 {
+  margin: 0 0 10px;
+  font-family: 'Tajawal', system-ui, sans-serif;
+  font-size: 14px; font-weight: 900; color: var(--ad-accent-deep);
+}
+.ad-row {
+  display: flex; align-items: baseline; justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px dashed var(--ad-line);
+  font-size: 13px;
+}
+.ad-row:last-child { border-bottom: 0; }
+.ad-row .ad-k { color: var(--ad-text-dim); font-weight: 700; }
+.ad-row .ad-v { color: var(--ad-ink); font-weight: 800; }
+.ad-row .ad-v.ad-money { color: var(--ad-accent-deep); font-family: 'Tajawal', system-ui, sans-serif; font-weight: 900; font-size: 15px; }
+.ad-row .ad-v.ad-null { color: var(--ad-text-dim); font-weight: 600; font-size: 12px; }
+
+/* Notice / error */
+.ad-notice {
+  background: linear-gradient(180deg, #FBFDF9 0%, #F5FAF6 100%);
+  border: 1px dashed rgba(46, 158, 119, .28);
+  border-radius: 12px;
+  padding: 12px 14px;
+  color: var(--ad-accent-deep);
+  font-size: 13px; font-weight: 600; line-height: 1.6;
+  text-align: center;
+}
+.ad-notice.err {
+  background: linear-gradient(180deg, #FDF2EF 0%, #FCE7DF 100%);
+  border-color: rgba(178, 66, 46, .28);
+  color: var(--ad-warn);
+}
+
+/* Login form */
+.ad-login-form {
+  display: flex; flex-direction: column; gap: 10px;
+  margin-top: 6px;
+}
+.ad-login-form label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--ad-text-dim); font-weight: 700; }
+.ad-login-form input {
+  padding: 12px 14px;
+  border: 1.5px solid var(--ad-line);
+  border-radius: 12px;
+  background: #fff;
+  font-family: inherit; font-size: 14px; color: var(--ad-ink);
+}
+.ad-login-form input:focus {
+  outline: 0;
+  border-color: var(--ad-accent);
+  box-shadow: 0 0 0 3px rgba(46, 158, 119, .14);
+}
+.ad-login-form button {
+  padding: 13px 20px;
+  border: 0; border-radius: 13px;
+  background: linear-gradient(180deg, var(--ad-accent) 0%, var(--ad-accent-deep) 100%);
+  color: #fff; font-family: inherit; font-weight: 900; font-size: 14px;
+  cursor: pointer;
+  box-shadow: 0 5px 16px rgba(46, 158, 119, .28);
+  transition: transform .1s ease;
+}
+.ad-login-form button:active { transform: scale(.98); }
+.ad-login-form button:disabled { opacity: .5; cursor: not-allowed; box-shadow: none; }
+
+.ad-login-note {
+  margin-top: 10px; padding: 10px 12px;
+  background: #F1F5F1; border: 1px dashed rgba(46, 158, 119, .20);
+  border-radius: 10px;
+  font-size: 11.5px; color: var(--ad-text-dim); line-height: 1.6;
+}

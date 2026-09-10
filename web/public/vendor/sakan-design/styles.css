@@ -7736,3 +7736,22 @@ img{ -webkit-user-drag:none; user-select:none; }
   color:#fff;
   box-shadow:0 3px 10px rgba(46,158,119,.28);
 }
+
+/* Small "Admin" gateway link at the bottom of the auth screen. */
+.admin-gateway-link{
+  display:flex; align-items:center; justify-content:center; gap:6px;
+  margin:14px auto 6px;
+  padding:8px 14px;
+  color:rgba(216,245,236,.55);
+  font-size:11.5px; font-weight:700;
+  text-decoration:none;
+  border:1px solid rgba(216,245,236,.10);
+  border-radius:999px;
+  width:fit-content;
+  transition:color .15s ease, border-color .15s ease, background .15s ease;
+}
+.admin-gateway-link:hover{
+  color:rgba(216,245,236,.90);
+  border-color:rgba(216,245,236,.28);
+  background:rgba(255,255,255,.04);
+}

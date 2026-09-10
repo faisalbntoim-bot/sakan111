@@ -2401,6 +2401,14 @@
           </button>
           <div class="admin-block-note">🔒 هذه الشاشة تظهر لك أنت فقط · ستُنقل مستقبلاً إلى صفحة مخصّصة</div>
         </div>`:''}
+        <!-- Public "Admin" gateway — small link at the very bottom of the
+             auth screen. It only navigates; the /ar/admin route enforces
+             its own JWT+role check server-side (401/403 for non-admins),
+             so exposing this link cannot grant any real access. -->
+        <a class="admin-gateway-link" href="/ar/admin/login" data-act="noop">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6l8-3z"/></svg>
+          <span>الإدارة</span>
+        </a>
       </div>
       <div class="off-body" style="display:${state.authView==='otp'?'':'none'}">
         <div class="off-section-title">رمز التحقق</div>
