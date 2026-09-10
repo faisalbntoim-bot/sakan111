@@ -15,6 +15,7 @@ export type BookingState = {
   checkOut: string | null;  // YYYY-MM-DD
   adults: number;
   children: number;
+  infants: number;
 };
 
 const SERVICE_FEE_RATE = 0.12; // 12% platform service fee (mirrors SPA)
@@ -44,7 +45,7 @@ export function writeBooking(state: BookingState): void {
 }
 
 export function blankBooking(id: string): BookingState {
-  return { propertyId: id, checkIn: null, checkOut: null, adults: 1, children: 0 };
+  return { propertyId: id, checkIn: null, checkOut: null, adults: 1, children: 0, infants: 0 };
 }
 
 export function nightsBetween(checkIn: string | null, checkOut: string | null): number {

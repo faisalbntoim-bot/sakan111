@@ -1,9 +1,10 @@
 'use client';
 
 /**
- * Two-row guests counter used on the dates step. Adults have a minimum
- * of 1; children start at 0. If the property specifies a maxGuests, the
- * combined total cannot exceed it.
+ * Compact three-row guests counter (adults / children / infants).
+ * Adults have a minimum of 1; children and infants start at 0. The
+ * maxGuests cap counts adults + children only — infants don't count
+ * toward capacity per common short-let convention.
  */
 
 import { nfA } from '@/lib/booking-state';
@@ -11,8 +12,9 @@ import { nfA } from '@/lib/booking-state';
 type Props = {
   adults: number;
   children: number;
-  maxGuests: number; // 0 = no cap (e.g. land parcels)
-  onChange: (next: { adults: number; children: number }) => void;
+  infants: number;
+  maxGuests: number; // 0 = no cap
+  onChange: (next: { adults: number; children: number; infants: number }) => void;
 };
 
 function Row({
@@ -60,7 +62,7 @@ function Row({
   );
 }
 
-export function GuestsPicker({ adults, children, maxGuests, onChange }: Props) {
+export function GuestsPicker({ adults, children, infants, maxGuests, onChange }: Props) {
   const capReached = maxGuests > 0 && adults + children >= maxGuests;
   return (
     <div className="gp">
@@ -70,8 +72,8 @@ export function GuestsPicker({ adults, children, maxGuests, onChange }: Props) {
         value={adults}
         min={1}
         canInc={!capReached}
-        onDec={() => onChange({ adults: adults - 1, children })}
-        onInc={() => onChange({ adults: adults + 1, children })}
+        onDec={() => onChange({ adults: adults - 1, children, infants })}
+        onInc={() => onChange({ adults: adults + 1, children, infants })}
       />
       <Row
         label="الأطفال"
@@ -79,13 +81,20 @@ export function GuestsPicker({ adults, children, maxGuests, onChange }: Props) {
         value={children}
         min={0}
         canInc={!capReached}
-        onDec={() => onChange({ adults, children: children - 1 })}
-        onInc={() => onChange({ adults, children: children + 1 })}
+        onDec={() => onChange({ adults, children: children - 1, infants })}
+        onInc={() => onChange({ adults, children: children + 1, infants })}
+      />
+      <Row
+        label="الرضع"
+        hint="أقل من سنتين"
+        value={infants}
+        min={0}
+        canInc={true}
+        onDec={() => onChange({ adults, children, infants: infants - 1 })}
+        onInc={() => onChange({ adults, children, infants: infants + 1 })}
       />
       {maxGuests > 0 && (
-        <div className="gp-note">
-          الحد الأقصى للضيوف لهذا العقار: {nfA(maxGuests)}
-        </div>
+        <div className="gp-note">الحد الأقصى لهذا العقار: {nfA(maxGuests)} ضيوف</div>
       )}
     </div>
   );

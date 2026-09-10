@@ -348,7 +348,7 @@
     detailOpen:false, detailIdx:0, rentalMode:'annual', calSelStart:null, calSelEnd:null,
     feeOpen:false, feeMode:'annual',
     authOpen:false, authView:'login', phoneValue:'', generatedOtp:'', otpDigits:['','','','','',''],
-    loggedIn:false, userRole:'seeker', mktPeriod:'3m',
+    loggedIn:false, userRole:'seeker', mktPeriod:'3m', mktMoveTab:'sale',
     notifOpen:false, reqsPageOpen:false,
     bookOpen:false, bookDay:null, bookTime:null, tourOpen:false, lang:'ar', preset:null, commResult:null,
     officesOpen:false, arRunning:false, arPct:0, arDone:false,
@@ -873,6 +873,7 @@
       else if(k==='notif') setState({authOpen:false, notifOpen:true});
     },
     setMktPeriod(k){ setState({mktPeriod:k}); },
+    setMktMoveTab(k){ setState({mktMoveTab:k}); },
     openNotif(){ setState({notifOpen:true, authOpen:false}); },
     closeNotif(){ setState({notifOpen:false}); },
     openReqsPage(){ setState({reqsPageOpen:true, authOpen:false}); },
@@ -2676,300 +2677,191 @@
     </svg>`;
   }
   function marketHtml(){
-    const hero={name:'مؤشر أسعار عقارات الرياض', val:'٤٢١', unit:'نقطة', chg:3.2, sub:'ارتفاع خلال آخر ٣ أشهر مدفوعًا بالطلب على الشقق'};
-    const period=state.mktPeriod||'3m';
-    const periods=[['1m','شهر'],['3m','٣ أشهر'],['1y','سنة']];
-    const idx=[
-      {ic:'📐', name:'سعر المتر · شقق', val:'٥٬٤٠٠', unit:'ر.س/م²', chg:1.8, sub:'متوسط شراء المتر'},
-      {ic:'🏠', name:'الإيجار السنوي', val:'٣٨٬٠٠٠', unit:'ر.س', chg:-0.6, sub:'شقة ٣ غرف شمالًا'},
-      {ic:'📈', name:'العائد الإيجاري', val:'٦٫٢٪', unit:'سنويًا', chg:0.4, sub:'متوسط عائد المستثمر'},
-      {ic:'🔁', name:'حجم التداول', val:'٢٫٧', unit:'مليار', chg:5.4, sub:'صفقات هذا الشهر'},
+    // --- Quick indicators (top of the pulse page) ---------------------
+    const activeTab = state.mktMoveTab || 'sale';
+    const tabs = [
+      { k:'sale',   label:'البيع',    ic:'🏷️',  avg:'٥٬٤٠٠ ر.س/م²', top:'حي حطين',     chg: 4.2, count:'٤٢٣ صفقة' },
+      { k:'rent-y', label:'الإيجار',   ic:'🔑',  avg:'٣٨٬٠٠٠ ر.س',    top:'حي الملقا',   chg: 2.6, count:'٥١٨ عقد' },
+      { k:'daily',  label:'اليومي',    ic:'🌙',  avg:'٣٢٠ ر.س/ليلة',   top:'حي الياسمين', chg:-1.4, count:'٣٣٣ حجز' },
     ];
+    const currentTab = tabs.find(t=>t.k===activeTab) || tabs[0];
+
+    // --- Top-active neighbourhoods (horizontal scroll) ----------------
+    // Derived from the same properties[] list already used by every
+    // other surface, so hood names always match what the user sees
+    // elsewhere. Deterministic pseudo-metric keeps repeat visits stable.
+    const hoodSeed = h => { let x=0; for(let i=0;i<h.length;i++) x=((x<<5)-x+h.charCodeAt(i))|0; return Math.abs(x); };
+    const hoodCityMap = {'حي الملقا':'الرياض','حي النرجس':'الرياض','حي الياسمين':'الرياض','حي العارض':'الرياض','حي القيروان':'الرياض','حي حطين':'الرياض'};
+    const hoodChange = h => ((hoodSeed(h)%80 - 20)/10);
+    const uniqHoods = [...new Set(properties.map(p=>p.neighborhood))]
+      .map(h => ({ name:h, city:(hoodCityMap[h]||'الرياض'), chg:hoodChange(h), count:properties.filter(p=>p.neighborhood===h).length }))
+      .sort((a,b)=> b.chg - a.chg);
+
+    // --- Recent deals (from properties[] price data) ------------------
+    const timeAgo = ['اليوم','منذ ساعتين','أمس','قبل ٣ أيام','قبل يومين','قبل ٤ أيام'];
+    const recentDeals = properties
+      .filter(p=>p.price)
+      .slice(0, 6)
+      .map((p,i)=>({
+        type: p.category,
+        loc: `${(hoodCityMap[p.neighborhood]||'الرياض')} · ${p.neighborhood}`,
+        price: p.price,
+        when: timeAgo[i%timeAgo.length],
+        idx: properties.indexOf(p),
+      }));
+
+    // --- "May interest you" opportunities (short-term-friendly picks) --
+    const opps = properties.filter(p=>p.shortTerm && p.dailyRate>0).slice(0, 6);
+
+    // --- Exclusive offers (preserved as-is per spec) ------------------
     const offers=[
       {t:'خصم ١٥٪ على الإيجار السنوي', s:'فيلا حي الملقا · لأول ٣ مستأجرين', tag:'حصري', idx:4},
       {t:'شهر مجاني', s:'استوديو حي العارض · عقد ١٢ شهر', tag:'محدود', idx:3},
       {t:'بدون عمولة', s:'شقة حي النرجس · هذا الأسبوع فقط', tag:'حصري', idx:1},
     ];
-    const chip = m => `<span class="mkt-chg ${m.chg>=0?'up':'down'}">${m.chg>=0?'▲':'▼'} ${Math.abs(m.chg)}%</span>`;
+
+    const chgChip = n => `<span class="mp2-chg ${n>=0?'up':'down'}">${n>=0?'▲':'▼'} ${Math.abs(n).toFixed(1)}٪</span>`;
+
     return `
       <div class="sheet-overlay above ${state.marketOpen?'open':''}" data-act="closeMarket"></div>
-      <div class="sheet above market-sheet ${state.marketOpen?'open':''}">
+      <div class="sheet above market-sheet mp2 ${state.marketOpen?'open':''}">
         <div class="sheet-handle"></div>
-        <div class="sheet-head"><h3><span class="mp-ic">${pulseIconSvg(16)}</span> نبض العقار والصفقات</h3><button class="close" data-act="closeMarket">✕</button></div>
-        <div class="mkt-hero2 has-sky">
-          <div class="mh2-sky">${kafdHeroSvg()}</div>
-          <div class="mh2-top">
-            <div><div class="mh2-label"><span class="live-dot"></span> ${esc(hero.name)}</div>
-              <div class="mh2-val">${hero.val} <small>${esc(hero.unit)}</small></div></div>
-            <div class="mh2-chg up">▲ ${hero.chg}٪<small>٣ أشهر</small></div>
-          </div>
-          <div class="mh2-forecast"><span class="mhf-ic">${statIconSvg('spark',13)}</span><span class="mhf-tx">توقّع الذكاء الاصطناعي · ٩٠ يومًا</span><span class="mhf-val up">▲ ٢٫١٪</span><span class="mhf-conf">ثقة ٨٤٪</span></div>
-          <div class="mh2-chart">${bigChart()}</div>
-          <div class="mh2-periods">${periods.map(p=>`<button class="mkp ${period===p[0]?'on':''}" data-act="setMktPeriod" data-key="${p[0]}">${p[1]}</button>`).join('')}</div>
-          <div class="mh2-range"><span>أدنى ٥٢أ <b>٣٩٨</b></span><span>أعلى ٥٢أ <b>٤٣٦</b></span><span>التذبذب <b>منخفض</b></span></div>
+        <div class="sheet-head"><h3><span class="mp-ic">${pulseIconSvg(16)}</span> نبض السوق</h3><button class="close" data-act="closeMarket">✕</button></div>
+
+        <div class="mp2-intro">
+          <h2>نبض السوق</h2>
+          <p>تعرّف على حركة السوق والفرص العقارية من مكان واحد.</p>
         </div>
-        <div class="mkt-updated"><span>آخر تحديث ١٠:٤٥ص</span><span class="mu-src">المصدر: ٣٬٢٠٠ صفقة موثّقة</span></div>
 
-        ${(function(){
-          // --- Favourite neighbourhoods + AI market insights ---
-          // Real Leaflet map (already inlined in the bundle) with a real
-          // OSM tile layer + click-a-district polygon → toggles favourite.
-          // Below: AI-signal card with a per-hood signal & trend + a
-          // broadcast CTA that notifies owners/marketers.
-          const hoods=[...new Set(properties.map(p=>p.neighborhood))];
-          const fav = state.favHoods || [];
-          const cnt = h => properties.filter(p=>p.neighborhood===h).length;
-          const priceRange = h => {
-            const arr=properties.filter(p=>p.neighborhood===h && p.price).map(p=>p.price);
-            if(!arr.length) return '—';
-            return `${nfA(Math.min(...arr))} - ${nfA(Math.max(...arr))} ر.س`;
-          };
-          const avgPrice = h => {
-            const arr=properties.filter(p=>p.neighborhood===h && p.price).map(p=>p.price);
-            return arr.length ? Math.round(arr.reduce((s,x)=>s+x,0)/arr.length) : 0;
-          };
-          // Deterministic AI signal per hood (looks live but seeded on hood
-          // name → same value each visit, so nothing looks "made up").
-          const hoodSignal = h => {
-            let hash = 0; for(let i=0;i<h.length;i++) hash = ((hash<<5)-hash+h.charCodeAt(i))|0;
-            const abs = Math.abs(hash);
-            const trend = ((abs%80)-30)/10;                 // -3.0 .. +5.0
-            const demand = 55 + (abs%35);                    // 55..90 %
-            return { trend, demand, hot: trend>2.5, cool: trend<-1 };
-          };
-          const totalMatches = fav.reduce((s,h)=>s+cnt(h), 0);
-          return `<div class="off-section-title">
-            <span class="sec-title-ic">🗺️</span> اختر أحياءك على الخريطة
-            <span class="sec-hint">اضغط اسم الحي لإضافته لمفضّلتك</span>
+        <div class="mp2-stats">
+          <div class="mp2-stat">
+            <div class="mp2-s-ic">📐</div>
+            <div class="mp2-s-k">متوسط سعر المتر</div>
+            <div class="mp2-s-v">٥٬٨٥٠ <small>ر.س</small></div>
+            <div class="mp2-s-chg up">▲ ٢٫٤٪</div>
           </div>
-          <div class="favhoods-card v2">
-            ${(function(){
-              // Real Riyadh mini-map built from NAV_HOODS coordinates
-              // (same source of truth used by the full Leaflet map).
-              // Each hood is a clickable circle+label. Selected hoods
-              // get a green fill + ripple. No external tiles needed.
-              const W=320, H=220;
-              const fav = state.favHoods || [];
-              const scale = Math.min(W/1000, H/1440);
-              const dots = NAV_HOODS.map(h => {
-                const x = h.mx*scale, y = h.my*scale;
-                // Only include hoods that map to a real property, to
-                // avoid dots that look interactive but do nothing.
-                const has = properties.some(p => p.neighborhood.replace('حي ','') === h.name);
-                if(!has) return '';
-                const on = fav.includes('حي '+h.name) || fav.includes(h.name);
-                return `<g class="fhm-dot ${on?'on':''}" transform="translate(${x.toFixed(1)},${y.toFixed(1)})" data-act="toggleFavHood" data-key="حي ${esc(h.name)}">
-                  <circle r="${on?18:12}" class="fhm-hitbox" fill="rgba(255,255,255,0)"/>
-                  ${on?`<circle r="16" class="fhm-halo" fill="rgba(14,124,102,.18)"/>`:''}
-                  <circle r="${on?9:7}" class="fhm-core"/>
-                  ${on?`<path d="M -3 0 L -1 2 L 4 -3" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>`:''}
-                  <text y="-14" text-anchor="middle" class="fhm-lbl">${esc(h.name)}</text>
-                </g>`;
-              }).join('');
-              return `<div class="fh-map-real">
-                <svg viewBox="0 0 ${W} ${H}" width="100%" height="220" xmlns="http://www.w3.org/2000/svg">
-                  <defs>
-                    <linearGradient id="fhmBg" x1="0" y1="0" x2="1" y2="1">
-                      <stop offset="0" stop-color="#F5FAF8"/>
-                      <stop offset="1" stop-color="#E7FBF4"/>
-                    </linearGradient>
-                    <pattern id="fhmGrid" width="20" height="20" patternUnits="userSpaceOnUse">
-                      <path d="M20 0 L0 0 0 20" fill="none" stroke="rgba(14,124,102,.06)" stroke-width="1"/>
-                    </pattern>
-                  </defs>
-                  <rect width="${W}" height="${H}" fill="url(#fhmBg)"/>
-                  <rect width="${W}" height="${H}" fill="url(#fhmGrid)"/>
-                  <!-- major arterial lines through Riyadh (approx) -->
-                  <path d="M0 ${H*0.35} Q${W*0.5} ${H*0.32} ${W} ${H*0.38}" stroke="rgba(14,124,102,.18)" stroke-width="1.4" fill="none"/>
-                  <path d="M0 ${H*0.62} Q${W*0.5} ${H*0.68} ${W} ${H*0.60}" stroke="rgba(14,124,102,.14)" stroke-width="1.4" fill="none"/>
-                  <path d="M${W*0.48} 0 Q${W*0.52} ${H*0.5} ${W*0.5} ${H}" stroke="rgba(14,124,102,.12)" stroke-width="1.4" fill="none"/>
-                  <!-- north compass label -->
-                  <text x="${W-14}" y="18" class="fhm-compass" text-anchor="end">شمال ▲</text>
-                  ${dots}
-                </svg>
-              </div>`;
-            })()}
-            <div class="fh-map-hint">
-              <span class="fmh-ic">💡</span>
-              <span>حدد أحياءك · نُظهر لك مباشرة ما يُطرح فيها</span>
-              ${fav.length ? `<span class="fmh-count">${nfA(fav.length)} محدّد</span>` : ''}
-            </div>
-            <div class="fh-chips">
-              ${hoods.map(h=>{
-                // hoods come pre-prefixed with "حي "; keep the same key
-                // the map dots use so both surfaces toggle in sync.
-                const key = h.startsWith('حي ') ? h : ('حي '+h);
-                const on=fav.includes(key);
-                return `<button class="fh-chip ${on?'on':''}" data-act="toggleFavHood" data-key="${esc(key)}">
-                  <span class="fh-dot"></span>
-                  <span class="fh-tx"><b>${esc(h)}</b><small>${nfA(cnt(h))} عرض · ${esc(priceRange(h))}</small></span>
-                  <span class="fh-check">✓</span>
-                </button>`;
-              }).join('')}
-            </div>
-            <div class="fh-summary">
-              <div class="fh-stats">
-                <div class="fhs-item"><b>${nfA(fav.length)}</b><small>حي مفضّل</small></div>
-                <div class="fhs-item"><b>${nfA(totalMatches)}</b><small>عرض مطابق</small></div>
-                <div class="fhs-item"><b>${nfA(state.interestBroadcasts||0)}</b><small>مرة نُشرت</small></div>
-              </div>
-              <button class="fh-broadcast" data-act="broadcastInterest">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l18-8v18l-18-8v-2z"/><circle cx="12" cy="12" r="2"/></svg>
-                <span>أرسل اهتمامي — أخبر المالكين/المسوّقين</span>
-              </button>
-              <div class="fh-hint">✨ عند الإرسال، يظهر طلبك في قائمة مالكي ومسوّقي هذه الأحياء ويصلك جديدهم فوراً</div>
-            </div>
+          <div class="mp2-stat">
+            <div class="mp2-s-ic">📈</div>
+            <div class="mp2-s-k">التغير الأسبوعي</div>
+            <div class="mp2-s-v">+٢٫٤<small>٪</small></div>
+            <div class="mp2-s-chg up">▲ عن الأسبوع الماضي</div>
           </div>
-
-          <div class="off-section-title">
-            <span class="sec-title-ic">💎</span> اشتراكات سكن هوب
-            <span class="sec-hint">اختر الخطة المناسبة لك</span>
+          <div class="mp2-stat">
+            <div class="mp2-s-ic">🏠</div>
+            <div class="mp2-s-k">عقارات جديدة</div>
+            <div class="mp2-s-v">١٢٨</div>
+            <div class="mp2-s-chg up">▲ ١١٪</div>
           </div>
-          <div class="subs-strip">
-            ${[
-              {code:'FREE',   name:'مجاني',   price:'0',   sub:'إعلان واحد · إحصائيات أساسية', badge:''},
-              {code:'PRO',    name:'محترف',   price:'49',  sub:'حتى ١٠ إعلانات · تقارير مفصّلة', badge:'الأكثر شيوعاً'},
-              {code:'OFFICE', name:'مكاتب',   price:'299', sub:'إعلانات غير محدودة · فريق ومكتب', badge:''},
-            ].map(pl=>`<div class="subs-plan ${pl.badge?'featured':''}">
-              ${pl.badge?`<span class="subs-badge">${esc(pl.badge)}</span>`:''}
-              <div class="subs-name">${esc(pl.name)}</div>
-              <div class="subs-price"><b>${esc(pl.price)}</b><small>ر.س/شهر</small></div>
-              <div class="subs-sub">${esc(pl.sub)}</div>
-              <button class="subs-cta" data-act="subToast" data-key="${esc(pl.code)}">${pl.code==='FREE'?'ابدأ الآن':'اختر الخطة'}</button>
-            </div>`).join('')}
+          <div class="mp2-stat">
+            <div class="mp2-s-ic">✨</div>
+            <div class="mp2-s-k">فرص استثمارية</div>
+            <div class="mp2-s-v">٢٤</div>
+            <div class="mp2-s-chg up">▲ ٣</div>
           </div>
-
-          <div class="off-section-title">
-            <span class="sec-title-ic">📈</span> صفقات ٣٠ يوم
-            <span class="sec-hint">أرقام موثّقة من دفتر سكن هوب</span>
-          </div>
-          <div class="deals-30-card">
-            <div class="d30-hero">
-              <div class="d30-total">
-                <small>إجمالي الصفقات المبرمة</small>
-                <b>١٬٢٧٤</b>
-              </div>
-              <div class="d30-trend up">▲ ٨٫٤٪ عن الشهر الماضي</div>
-            </div>
-            <div class="d30-grid">
-              <div class="d30-tile sale">
-                <div class="d30-t-ic">🏷️</div>
-                <div class="d30-t-tx"><b>٤٢٣</b><small>عقد بيع</small></div>
-                <div class="d30-t-chg up">▲ ٥٪</div>
-              </div>
-              <div class="d30-tile rent-y">
-                <div class="d30-t-ic">🔑</div>
-                <div class="d30-t-tx"><b>٥١٨</b><small>إيجار سنوي</small></div>
-                <div class="d30-t-chg up">▲ ١٢٪</div>
-              </div>
-              <div class="d30-tile rent-d">
-                <div class="d30-t-ic">🌙</div>
-                <div class="d30-t-tx"><b>٣٣٣</b><small>إيجار يومي</small></div>
-                <div class="d30-t-chg down">▼ ٢٪</div>
-              </div>
-            </div>
-            <div class="d30-timeline">
-              <div class="d30-tl-head">
-                <b>خط الزمن — آخر ٧ أيام</b>
-                <small>عقود تُبرَم يومياً</small>
-              </div>
-              <div class="d30-bars">
-                ${[38,52,44,61,49,58,72].map((n,i)=>{
-                  const dayNames=['السبت','الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة'];
-                  const h = Math.max(18, Math.round(n*1.05));
-                  const isMax = n===Math.max(38,52,44,61,49,58,72);
-                  return `<div class="d30-bar ${isMax?'max':''}" style="height:${h}%">
-                    <span class="d30-b-n">${nfA(n)}</span>
-                    <span class="d30-b-day">${esc(dayNames[i])}</span>
-                  </div>`;
-                }).join('')}
-              </div>
-            </div>
-            <div class="d30-note">
-              <span class="d30-n-ic">🔒</span>
-              <span>كل صفقة تظهر بعد توثيقها إلكترونياً وتحويل الضمان — بدون بيانات شخصية</span>
-            </div>
-          </div>
-
-          <div class="off-section-title">
-            <span class="sec-title-ic">🤖</span> نبض العقار والصفقات بالذكاء الاصطناعي
-            <span class="sec-hint">تحليل لحظي لكل حي</span>
-          </div>
-          <div class="ai-market-card">
-            <div class="amc-badge">
-              <span class="amc-b-dot"></span>
-              تحديث لحظي · نموذج AI مبني على ٣٬٢٠٠ صفقة موثّقة
-            </div>
-            <div class="ai-hoods-grid">
-              ${hoods.map(h=>{
-                const s = hoodSignal(h);
-                const avg = avgPrice(h);
-                const badge = s.hot ? {t:'ساخن',c:'hot',e:'🔥'}
-                          : s.cool ? {t:'راكد',c:'cool',e:'❄️'}
-                          : {t:'مستقر',c:'ok',e:'✨'};
-                return `<div class="ai-hood ${badge.c}">
-                  <div class="ah-top">
-                    <div class="ah-name"><b>${esc(h)}</b><small>متوسط ${avg?nfA(avg):'—'} ر.س</small></div>
-                    <span class="ah-badge">${badge.e} ${badge.t}</span>
-                  </div>
-                  <div class="ah-bars">
-                    <div class="ah-bar"><small>الطلب</small><div class="ah-track"><span style="width:${s.demand}%"></span></div><b>${nfA(s.demand)}%</b></div>
-                    <div class="ah-bar"><small>الاتجاه (٩٠ي)</small><div class="ah-trend ${s.trend>=0?'up':'down'}">${s.trend>=0?'▲':'▼'} ${Math.abs(s.trend).toFixed(1)}%</div></div>
-                  </div>
-                </div>`;
-              }).join('')}
-            </div>
-            <div class="amc-foot">
-              <span class="amc-shield">🔒</span>
-              <span>الأرقام توضيحية مبنية على النموذج · التكامل مع مزوّد بيانات فعلي قيد التفعيل</span>
-            </div>
-          </div>`;
-        })()}
-
-        <div class="off-section-title">نبض العقار والصفقات اليوم</div>
-        <div class="mkt-activity">
-          <div class="mact rented"><span class="mact-ic">${statIconSvg('key')}</span><b>١٤٢</b><small>تأجّر اليوم</small><span class="mact-chg up">▲ ٨٪</span></div>
-          <div class="mact listed"><span class="mact-ic">${statIconSvg('home')}</span><b>٨٦</b><small>معروض جديد</small><span class="mact-chg up">▲ ٥٪</span></div>
-          <div class="mact vol"><span class="mact-ic">${statIconSvg('swap')}</span><b>٢٧</b><small>صفقة تداول</small><span class="mact-chg down">▼ ٣٪</span></div>
         </div>
-        <div class="mkt-ai"><span class="mkt-ai-ic">${statIconSvg('spark',15)}</span><div class="mkt-ai-b"><b>قراءة الذكاء الاصطناعي</b><small>السوق في اتجاه صاعد معتدل — أفضل فرص العائد حاليًا في شقق شمال الرياض وأراضي العارض. التوقيت مناسب للمستأجر قبل ارتفاع الربع القادم.</small></div></div>
-        <div class="mkt-h-row"><div class="mkt-h"><span class="mkt-h-ic">${statIconSvg('trendup',14)}</span> الأحياء الأعلى نموًّا</div><span class="mkt-h-note">آخر ٣ سنوات</span></div>
-        <div class="hood-lead">
-          ${[['العارض',16,true],['النرجس',11,false],['الملقا',9,false],['الياسمين',6,false],['حطين',5,false]].map((h,i)=>{
-            const pct=Math.round(h[1]/16*100);
-            const heat = h[1]>=13?'#0E7C66':h[1]>=9?'#2E9E77':h[1]>=6?'#6FBF9A':'#A9D6BF';
-            return `<div class="hl-row" data-act="marketHoodFilter" data-val="حي ${esc(h[0])}">
-              <span class="hl-rank ${i===0?'gold':''}">${nfA(i+1)}</span>
-              <div class="hl-main">
-                <div class="hl-top"><span class="hl-name">حي ${esc(h[0])}${h[2]?' <span class="hl-tag">الأفضل للاستثمار</span>':''}</span><span class="hl-val">▲ ${nfA(h[1])}٪</span></div>
-                <div class="hl-bar"><span style="width:${pct}%;background:${heat}"></span></div>
+
+        <div class="mp2-sec-h"><span>حركة السوق</span><small>اضغط التبويب لتغيير المؤشرات</small></div>
+        <div class="mp2-tabs">
+          ${tabs.map(t=>`<button class="mp2-tab ${t.k===activeTab?'on':''}" data-act="setMktMoveTab" data-key="${t.k}">
+            <span class="mp2-tab-ic">${t.ic}</span>
+            <span>${esc(t.label)}</span>
+          </button>`).join('')}
+        </div>
+        <div class="mp2-move">
+          <div class="mp2-move-row">
+            <span class="mp2-m-k">متوسط الأسعار</span>
+            <span class="mp2-m-v"><b>${esc(currentTab.avg)}</b></span>
+          </div>
+          <div class="mp2-move-row">
+            <span class="mp2-m-k">أكثر الأحياء نشاطًا</span>
+            <span class="mp2-m-v"><b>${esc(currentTab.top)}</b></span>
+          </div>
+          <div class="mp2-move-row">
+            <span class="mp2-m-k">الاتجاه</span>
+            <span class="mp2-m-v">${chgChip(currentTab.chg)}</span>
+          </div>
+          <div class="mp2-move-row">
+            <span class="mp2-m-k">عدد العقارات</span>
+            <span class="mp2-m-v"><b>${esc(currentTab.count)}</b></span>
+          </div>
+        </div>
+
+        <div class="mp2-sec-h"><span>الأحياء الأكثر نشاطًا</span><small>مؤشّرات آخر ٣٠ يومًا</small></div>
+        <div class="mp2-hoods-scroll">
+          ${uniqHoods.map(h=>`<div class="mp2-hood-card">
+            <div class="mp2-h-name">${esc(h.name)}</div>
+            <div class="mp2-h-city">${esc(h.city)}</div>
+            <div class="mp2-h-foot">
+              ${chgChip(h.chg)}
+              <span class="mp2-h-cnt">${nfA(h.count)} عرض</span>
+            </div>
+          </div>`).join('')}
+        </div>
+
+        <div class="mp2-sec-h"><span>أحدث الصفقات</span><small>محدَّث لحظيًا</small></div>
+        <div class="mp2-deals">
+          ${recentDeals.map(d=>`<div class="mp2-deal" data-act="openDetail" data-idx="${d.idx}">
+            <div class="mp2-d-ic">${d.type==='فيلا'?'🏡':d.type==='دوبلكس'?'🏘️':d.type==='أرض'?'🟩':d.type==='استوديو'?'🛋️':'🏢'}</div>
+            <div class="mp2-d-b">
+              <b>${esc(d.type)}</b>
+              <small>${esc(d.loc)}</small>
+            </div>
+            <div class="mp2-d-r">
+              <b>${nfA(d.price)} <small>ر.س</small></b>
+              <span>${esc(d.when)}</span>
+            </div>
+          </div>`).join('')}
+        </div>
+
+        <div class="mp2-sec-h"><span>فرص قد تهمك</span><small>مختارة بناءً على نشاط السوق</small></div>
+        <div class="mp2-opps-scroll">
+          ${opps.map(p=>{
+            const idx = properties.indexOf(p);
+            const seed = hoodSeed(p.neighborhood+p.type);
+            const opportunity = (seed%30)+5;
+            return `<div class="mp2-opp" data-act="openDetail" data-idx="${idx}">
+              <div class="mp2-o-thumb">${p.type==='فيلا'?'🏡':p.type==='دوبلكس'?'🏘️':p.type==='أرض'?'🟩':p.type==='استوديو'?'🛋️':'🏢'}</div>
+              <div class="mp2-o-body">
+                <b>${esc(p.type)}</b>
+                <small>${esc(p.neighborhood)}</small>
+                <div class="mp2-o-price">${nfA(p.dailyRate||p.price)} <small>${p.dailyRate?'ر.س/ليلة':'ر.س'}</small></div>
+                <div class="mp2-o-chg up">▲ ${nfA(opportunity)}٪ فرصة</div>
               </div>
             </div>`;
           }).join('')}
-          <div class="hl-foot"><span class="hlf-ic">${statIconSvg('spark',12)}</span> يتوقّع النموذج استمرار الطلب على الأراضي شمال الرياض — بيانات توضيحية.</div>
         </div>
-        <button class="fin-cta cmp" data-act="openCompare">
-          <span class="fin-cta-ic cmp-ic">${statIconSvg('compare',18)}</span>
-          <span class="fin-cta-tx"><b>مقارنة العقارات <span class="fin-new">جديد</span></b><small>قارن ٣ عقارات جنبًا إلى جنب واعرف الأفضل قيمةً</small></span>
-          <span class="fin-cta-go">قارن ›</span>
-        </button>
-        <button class="fin-cta pa" data-act="openPriceAlerts">
-          <span class="fin-cta-ic pa-ic">${statIconSvg('bell',18)}</span>
-          <span class="fin-cta-tx"><b>تنبيهات الأسعار <span class="fin-new">جديد</span></b><small>حدّد الحي والميزانية ونعلمك فور توفّر عقار مطابق أو انخفاض السعر</small></span>
-          <span class="fin-cta-go">فعّل ›</span>
-        </button>
-        <div class="owner-cta" data-act="ownerEstimate">
-          <div class="oc-b"><div class="oc-t"><span class="oc-ic">${statIconSvg('home',15)}</span> عندك عقار للإيجار؟</div><div class="oc-s">أضفه مجانًا واحصل على تقدير سعر فوري بالذكاء الاصطناعي</div></div>
-          <span class="oc-go">أضف عقارك ›</span>
-        </div>
-        <div class="mkt-h"><span class="mkt-h-ic">${statIconSvg('spark',14)}</span> عروض حصرية</div>
+
+        <div class="mp2-sec-h"><span>عروض حصرية</span><small>خصومات محدودة</small></div>
         <div class="excl-list">${offers.map(o=>`<div class="excl" data-act="openDetail" data-idx="${o.idx}">
           <div class="excl-badge">${esc(o.tag)}</div>
           <div class="excl-b"><div class="excl-t">${esc(o.t)}</div><div class="excl-s">${esc(o.s)}</div></div>
           <span class="excl-go">›</span>
         </div>`).join('')}</div>
-        <div class="mkt-method"><span class="dot2">ⓘ</span><span>منهجية المؤشر: متوسط مرجّح لأسعار الإيجار والبيع من صفقات موثّقة خلال آخر ٩٠ يومًا، مطبّعة على سعر المتر لكل حي. أرقام توضيحية لأغراض العرض ولا تُعد نصيحة استثمارية.</span></div>
+
+        <div class="mp2-sec-h"><span>ملخص السوق</span><small>قراءة سريعة</small></div>
+        <div class="mp2-summary">
+          <div class="mp2-sum-ic">🤖</div>
+          <div class="mp2-sum-b">
+            <b>شمال الرياض يقود الحركة هذا الأسبوع</b>
+            <p>شهدت عقارات شمال الرياض (الياسمين والملقا) نشاطًا أعلى من المتوسط، مع ارتفاع ملحوظ في الطلب على الفلل والدوبلكسات. الأراضي في القيروان والعارض تسجّل تحسّنًا متواصلًا في ثلاث دورات متتالية.</p>
+            <small>ملخّص توضيحي — التكامل مع مزوّد بيانات حقيقي قيد التفعيل.</small>
+          </div>
+        </div>
+
+        <button class="fin-cta cmp" data-act="openCompare">
+          <span class="fin-cta-ic cmp-ic">${statIconSvg('compare',18)}</span>
+          <span class="fin-cta-tx"><b>مقارنة العقارات</b><small>قارن حتى ٣ عقارات جنبًا إلى جنب</small></span>
+          <span class="fin-cta-go">قارن ›</span>
+        </button>
+        <button class="fin-cta pa" data-act="openPriceAlerts">
+          <span class="fin-cta-ic pa-ic">${statIconSvg('bell',18)}</span>
+          <span class="fin-cta-tx"><b>تنبيهات الأسعار</b><small>نعلمك فور توفّر عقار مطابق</small></span>
+          <span class="fin-cta-go">فعّل ›</span>
+        </button>
+
+        <div class="mkt-method"><span class="dot2">ⓘ</span><span>الأرقام مبنية على صفقات موثّقة خلال آخر ٩٠ يومًا. عرض توضيحي لأغراض المنصة، ولا يُعد نصيحة استثمارية.</span></div>
       </div>`;
+
   }
 
   /* ---- الطلبات العقارية: chat-like market mixing owner/office offers + client requests ---- */
@@ -4118,6 +4010,7 @@
       case 'setRole': H.setRole(key); break;
       case 'acctGo': H.acctGo(key); break;
       case 'setMktPeriod': H.setMktPeriod(key); break;
+      case 'setMktMoveTab': H.setMktMoveTab(key); break;
       case 'setAdmPeriod': H.setAdmPeriod(key); break;
       case 'toggleAdmUser': H.toggleAdmUser(idx); break;
       case 'admMove': H.admMove(idx, +key); break;
