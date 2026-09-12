@@ -458,12 +458,61 @@
       );
     },
     toggleDailyOnly(){ setState(s=>({dailyOnly:!s.dailyOnly})); },
+    _trackEvent: (function(){
+      /* Tiny in-SPA event tracker mirroring web/lib/analytics.ts.
+         Fire-and-forget; no third-party SDK; hard no-op when
+         NEXT_PUBLIC_API_BASE_URL is not exposed on the page. Reuses
+         one opaque sessionStorage token; dedupes property_view per
+         property per browser session so refresh spam does not
+         inflate the event stream. */
+      var BASE = (typeof window!=='undefined' && window.__SAKAN_API_BASE) || '';
+      var SEEN = new Set();
+      function sid(){
+        try{
+          var k='sh_analytics_session'; var s=window.sessionStorage.getItem(k);
+          if(!s){ var a=new Uint8Array(18); (window.crypto||window.msCrypto).getRandomValues(a);
+            s=Array.from(a).map(function(b){return b.toString(36).padStart(2,'0');}).join('').slice(0,24);
+            window.sessionStorage.setItem(k,s);
+          }
+          return s;
+        }catch(e){ return null; }
+      }
+      return function(eventName, data){
+        try{
+          if(!BASE) return;
+          data = data || {};
+          if(eventName==='property_view' && data.propertyId){
+            if(SEEN.has(data.propertyId)) return;
+            SEEN.add(data.propertyId);
+          }
+          var body = JSON.stringify(Object.assign({eventName:eventName, sessionId:sid()}, data));
+          if(navigator.sendBeacon){
+            navigator.sendBeacon(BASE+'/v1/events', new Blob([body], {type:'application/json'}));
+            return;
+          }
+          fetch(BASE+'/v1/events', {method:'POST', body:body,
+            headers:{'content-type':'application/json'}, keepalive:true, credentials:'include'
+          }).catch(function(){});
+        }catch(e){ /* analytics can never break the app */ }
+      };
+    })(),
     setDailyOnly(){ setState({dailyOnly:true, selectedPinIndex:0}); },
     setAnnualOnly(){ setState({dailyOnly:false, selectedPinIndex:0}); },
     toggleInvestorMode(){ showToast('💼 وضع المستثمر — قريبًا'); },
-    selectCategory(key){ setState({activeCategory:key, selectedPinIndex:0}); },
-    shareProp(){ showToast('🔗 تم نسخ رابط العقار (تجريبي)'); },
-    toggleSave(i){ const m={...state.savedIdx}; m[i]=!m[i]; setState({savedIdx:m}); showToast(m[i]?'⭐ أُضيف إلى المفضلة الحصرية':'أُزيل من المفضلة'); },
+    selectCategory(key){
+      setState({activeCategory:key, selectedPinIndex:0});
+      H._trackEvent('filter_change', { metadata: { filters: { category: String(key) }, source: 'feed' } });
+    },
+    shareProp(){
+      showToast('🔗 تم نسخ رابط العقار (تجريبي)');
+      var p = properties[state.detailIdx]; if(p) H._trackEvent('property_share', { propertyId: String(state.detailIdx), propertyType: p.category, city: 'الرياض', district: p.neighborhood });
+    },
+    toggleSave(i){
+      const m={...state.savedIdx}; const nowOn = !m[i]; m[i]=nowOn; setState({savedIdx:m});
+      showToast(nowOn?'⭐ أُضيف إلى المفضلة الحصرية':'أُزيل من المفضلة');
+      var p = properties[i];
+      H._trackEvent(nowOn?'property_save':'property_unsave', { propertyId: String(i), propertyType: p?.category, district: p?.neighborhood });
+    },
     toggleSaveDetail(i){ const m={...state.savedIdx}; m[i]=!m[i]; setState({savedIdx:m}); showToast(m[i]?'❤️ أُضيف إلى المفضلة':'أُزيل من المفضلة'); },
     shareFromCard(i){ const p=properties[i]; if(!p) return; const url=(location.href||'https://sakan.app').split('#')[0]+'#p='+i;
       const text=`${p.type} — ${p.neighborhood}، الرياض · ${nfA(p.price)} ر.س\n${url}`;
@@ -523,7 +572,12 @@
       const inp=document.getElementById('commentInput'); const val=(inp?inp.value:'').trim(); if(!val) return;
       const m={...state.commentsByProperty}; m[state.commentsIdx]=[...(m[state.commentsIdx]||[]),{name:'أنت',text:val}]; setState({commentsByProperty:m});
     },
-    openDetail(i){ if(properties[i]==null) return; setState({detailOpen:true,detailIdx:i,rentalMode:'annual',calSelStart:null,calSelEnd:null,feeOpen:false,mapOpen:false,marketOpen:false,dealsOpen:false,ejarOpen:false,reviewsAll:false}); },
+    openDetail(i){
+      if(properties[i]==null) return;
+      setState({detailOpen:true,detailIdx:i,rentalMode:'annual',calSelStart:null,calSelEnd:null,feeOpen:false,mapOpen:false,marketOpen:false,dealsOpen:false,ejarOpen:false,reviewsAll:false});
+      var p = properties[i];
+      H._trackEvent('property_view', { propertyId: String(i), propertyType: p?.category, city: 'الرياض', district: p?.neighborhood });
+    },
     toggleReviews(){ setState(s=>({reviewsAll:!s.reviewsAll})); },
     openAr(i){ const idx=(i!=null)?i:state.detailIdx; if(properties[idx]==null) return; SakanAR.open(idx); },
     closeDetail(){ setState({detailOpen:false}); },
@@ -600,8 +654,16 @@
     },
     openSecure(){ setState({secureOpen:true}); },
     closeSecure(){ setState({secureOpen:false}); },
-    openGallery(i){ setState({galleryOpen:true, galleryIdx:i||0}); },
-    openPhotos(idx){ setState({galleryOpen:true, galleryIdx:0, detailIdx:idx}); },
+    openGallery(i){
+      setState({galleryOpen:true, galleryIdx:i||0});
+      var p = properties[state.detailIdx];
+      H._trackEvent('property_open_gallery', { propertyId: String(state.detailIdx), propertyType: p?.category, district: p?.neighborhood });
+    },
+    openPhotos(idx){
+      setState({galleryOpen:true, galleryIdx:0, detailIdx:idx});
+      var p = properties[idx];
+      H._trackEvent('property_open_gallery', { propertyId: String(idx), propertyType: p?.category, district: p?.neighborhood });
+    },
     closeGallery(){ setState({galleryOpen:false}); },
     galleryGo(i){ setState({galleryIdx:i}); },
     galleryNav(dir){ const g=galleryFor(properties[state.detailIdx],state.detailIdx); const n=g.length; setState({galleryIdx:(state.galleryIdx+dir+n)%n}); },
