@@ -7737,21 +7737,114 @@ img{ -webkit-user-drag:none; user-select:none; }
   box-shadow:0 3px 10px rgba(46,158,119,.28);
 }
 
-/* Small "Admin" gateway link at the bottom of the auth screen. */
+/* Small "دخول الإدارة" gateway pill at the bottom of the auth screen.
+   Sits on the auth sheet's paper-white background, so it uses the
+   text-dim + accent tokens (not the low-opacity light-on-dark values
+   that the previous version had — those were invisible on paper). */
 .admin-gateway-link{
   display:flex; align-items:center; justify-content:center; gap:6px;
-  margin:14px auto 6px;
-  padding:8px 14px;
-  color:rgba(216,245,236,.55);
-  font-size:11.5px; font-weight:700;
+  margin:18px auto 8px;
+  padding:9px 16px;
+  color:var(--text-dim,#6C7B73);
+  font-family:inherit;
+  font-size:12.5px; font-weight:700;
   text-decoration:none;
-  border:1px solid rgba(216,245,236,.10);
+  border:1px solid var(--line,#DEE8E1);
+  background:#fff;
   border-radius:999px;
   width:fit-content;
-  transition:color .15s ease, border-color .15s ease, background .15s ease;
+  transition:color .15s ease, border-color .15s ease, background .15s ease, transform .1s ease;
 }
-.admin-gateway-link:hover{
-  color:rgba(216,245,236,.90);
-  border-color:rgba(216,245,236,.28);
-  background:rgba(255,255,255,.04);
+.admin-gateway-link:hover,
+.admin-gateway-link:focus-visible{
+  color:var(--accent-deep,#0C4C3A);
+  border-color:var(--accent,#2E9E77);
+  background:#F5FBF7;
+  outline:0;
+}
+.admin-gateway-link:active{ transform:scale(.97); }
+.admin-gateway-link svg{ color:var(--accent,#2E9E77); }
+
+/* ---- Market pulse: live indicator + section press feedback ------------ */
+.market-sheet.mp2 .mp2-intro-row{
+  display:flex; align-items:center; gap:10px;
+}
+.market-sheet.mp2 .mp2-intro-row h2{ margin:0; }
+.market-sheet.mp2 .mp2-live{
+  display:inline-flex; align-items:center; gap:5px;
+  padding:3px 9px;
+  background:rgba(46,158,119,.10);
+  color:#0A6B54;
+  font-size:10px; font-weight:900;
+  letter-spacing:.4px; text-transform:uppercase;
+  border-radius:999px;
+  font-family:inherit;
+}
+.market-sheet.mp2 .mp2-live-dot{
+  width:6px; height:6px; border-radius:50%;
+  background:#2E9E77;
+  animation: mp2Pulse 1.6s ease-in-out infinite;
+  box-shadow:0 0 0 0 rgba(46,158,119,.55);
+}
+@keyframes mp2Pulse{
+  0%,100% { transform:scale(1); box-shadow:0 0 0 0 rgba(46,158,119,.55); }
+  50%     { transform:scale(1.25); box-shadow:0 0 0 5px rgba(46,158,119,0); }
+}
+
+/* Micro press feedback on the tappable cards. */
+.market-sheet.mp2 .mp2-stat,
+.market-sheet.mp2 .mp2-hood-card,
+.market-sheet.mp2 .mp2-deal,
+.market-sheet.mp2 .mp2-opp{
+  transition: transform .1s ease, box-shadow .18s ease, border-color .15s ease, background .15s ease;
+}
+.market-sheet.mp2 .mp2-stat:active,
+.market-sheet.mp2 .mp2-hood-card:active,
+.market-sheet.mp2 .mp2-deal:active,
+.market-sheet.mp2 .mp2-opp:active{
+  transform: scale(.98);
+}
+
+/* Quick chips: fade+slide when the active one changes. */
+.market-sheet.mp2 .mp2-q{ transition: background .18s ease, color .18s ease, border-color .18s ease, transform .1s ease; }
+
+/* Trend strip (city arrows), rendered when data is available. */
+.market-sheet.mp2 .mp2-trend-strip{
+  display:flex; gap:8px;
+  padding:8px 16px 10px;
+  overflow-x:auto;
+  scrollbar-width:none;
+  -webkit-overflow-scrolling:touch;
+}
+.market-sheet.mp2 .mp2-trend-strip::-webkit-scrollbar{ display:none; }
+.market-sheet.mp2 .mp2-t-pill{
+  flex-shrink:0;
+  display:inline-flex; align-items:center; gap:5px;
+  padding:6px 11px;
+  background:#fff;
+  border:1px solid rgba(46,158,119,.14);
+  border-radius:999px;
+  font-size:11.5px; font-weight:800; color:#0C4C3A;
+}
+.market-sheet.mp2 .mp2-t-pill.up   { color:#0A6B54; }
+.market-sheet.mp2 .mp2-t-pill.down { color:#B04141; }
+.market-sheet.mp2 .mp2-t-pill.flat { color:#6C7B73; }
+.market-sheet.mp2 .mp2-t-pill .mp2-t-arr{ font-size:10px; }
+
+/* Sparkline (mini SVG line) inside a section. */
+.market-sheet.mp2 .mp2-spark{
+  width:100%; height:56px; display:block;
+  margin-top:8px;
+}
+
+/* Skeleton shimmer (used when a section is loading real API data). */
+.market-sheet.mp2 .mp2-skel{
+  background: linear-gradient(90deg, #ECF3EF 0%, #F5FBF7 50%, #ECF3EF 100%);
+  background-size: 200% 100%;
+  animation: mp2Shimmer 1.4s linear infinite;
+  border-radius: 10px;
+}
+@keyframes mp2Shimmer{
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
 }

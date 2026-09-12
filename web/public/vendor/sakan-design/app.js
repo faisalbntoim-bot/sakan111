@@ -2401,13 +2401,14 @@
           </button>
           <div class="admin-block-note">🔒 هذه الشاشة تظهر لك أنت فقط · ستُنقل مستقبلاً إلى صفحة مخصّصة</div>
         </div>`:''}
-        <!-- Public "Admin" gateway — small link at the very bottom of the
-             auth screen. It only navigates; the /ar/admin route enforces
-             its own JWT+role check server-side (401/403 for non-admins),
-             so exposing this link cannot grant any real access. -->
-        <a class="admin-gateway-link" href="/ar/admin/login" data-act="noop">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6l8-3z"/></svg>
-          <span>الإدارة</span>
+        <!-- Public "Admin" gateway — small pill at the very bottom of the
+             auth screen. Server-side JWT+role check on /ar/admin/login
+             (401/403 for non-admins) means exposing the link grants zero
+             access. No data-act so the SPA click delegate ignores it and
+             the anchor's default navigation runs. -->
+        <a class="admin-gateway-link" href="/ar/admin/login" aria-label="دخول الإدارة">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6l8-3z"/></svg>
+          <span>دخول الإدارة</span>
         </a>
       </div>
       <div class="off-body" style="display:${state.authView==='otp'?'':'none'}">
@@ -2740,8 +2741,14 @@
         <div class="sheet-head"><h3><span class="mp-ic">${pulseIconSvg(16)}</span> نبض السوق</h3><button class="close" data-act="closeMarket">✕</button></div>
 
         <div class="mp2-intro">
-          <h2>نبض السوق</h2>
-          <p>تعرّف على حركة السوق والفرص العقارية من مكان واحد.</p>
+          <div class="mp2-intro-row">
+            <h2>نبض السوق</h2>
+            <span class="mp2-live" aria-label="مباشر">
+              <span class="mp2-live-dot"></span>
+              مباشر
+            </span>
+          </div>
+          <p>ما يحدث الآن في السوق العقاري.</p>
         </div>
 
         <div class="mp2-quick" role="tablist" aria-label="تصفية سريعة">
@@ -2816,6 +2823,33 @@
               <span class="mp2-h-cnt">${nfA(h.count)} عرض</span>
             </div>
           </div>`).join('')}
+        </div>
+
+        <div class="mp2-sec-h"><span>حركة الأسعار</span><small>آخر ٧ أيام · مؤشّر توضيحي</small></div>
+        <div class="ad-card" style="margin:0 14px;">
+          ${(function(){
+            // Deterministic sparkline seeded on the active tab — no charting
+            // library needed. When the market pulse API is wired later, swap
+            // these 7 numbers for the real series.
+            const seed = activeTab.length + (currentTab.count.length%7);
+            const pts = Array.from({length:7}, (_,i)=> 40 + ((seed*13 + i*17)%50));
+            const W = 320, H = 56, PAD = 4;
+            const stepX = (W - PAD*2) / (pts.length - 1);
+            const min = Math.min(...pts), max = Math.max(...pts);
+            const y = v => H - PAD - ((v - min) / Math.max(1,(max-min))) * (H - PAD*2);
+            const d = pts.map((v,i)=> (i===0?'M':'L') + (PAD + i*stepX).toFixed(1) + ' ' + y(v).toFixed(1)).join(' ');
+            const area = d + ` L ${(W-PAD).toFixed(1)} ${H-PAD} L ${PAD} ${H-PAD} Z`;
+            return `<svg class="mp2-spark" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <defs>
+                <linearGradient id="sparkG" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0" stop-color="#2E9E77" stop-opacity=".28"/>
+                  <stop offset="1" stop-color="#2E9E77" stop-opacity="0"/>
+                </linearGradient>
+              </defs>
+              <path d="${area}" fill="url(#sparkG)"/>
+              <path d="${d}" fill="none" stroke="#0A6B54" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>`;
+          })()}
         </div>
 
         <div class="mp2-sec-h"><span>أحدث الصفقات</span><small>محدَّث لحظيًا</small></div>
