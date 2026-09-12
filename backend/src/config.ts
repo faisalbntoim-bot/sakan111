@@ -52,6 +52,12 @@ const schema = z.object({
    *  POST /v1/events is live. Default off — no writes happen and the
    *  endpoint replies with 204 (safe no-op for the frontend). */
   EVENT_TRACKING_ENABLED: z.coerce.boolean().default(false),
+  /** Recommendations v1 (recommendations/*). When true, GET
+   *  /v1/recommendations and GET /v1/properties/:id/similar rank
+   *  candidates using UserEvent history + Quality Score. Default off
+   *  — endpoints still respond (safe fallback: fresh + high-quality
+   *  listings) so the frontend can call blindly during rollout. */
+  RECOMMENDATIONS_ENABLED: z.coerce.boolean().default(false),
 });
 
 export const config = schema.parse(process.env);
