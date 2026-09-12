@@ -15,7 +15,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { config } from '../config.js';
 import { getPrisma } from '../db.js';
-import { getCaller, isAdminRole } from '../auth/rbac.js';
+import { getCaller, isAdminRole, requireAuth } from '../auth/rbac.js';
 import { badRequest, notFound } from '../errors.js';
 import { jsonSafe } from '../money.js';
 import { buildPreferenceProfile } from '../recommendation/preferences.js';
@@ -33,6 +33,17 @@ const listQuery = z.object({
   city: z.string().max(80).optional(),
   status: z.enum(['available', 'reserved', 'sold', 'rented', 'hidden']).optional(),
   ownerId: z.string().optional(),
+  // ---- Property Data v2 filters (all optional; backward compatible) ----
+  district: z.string().max(120).optional(),
+  propertyType: z.string().max(40).optional(),          // alias for `category`
+  listingType: z.string().max(40).optional(),           // alias for `purpose`
+  minPrice: z.coerce.number().nonnegative().optional(), // in halalahs
+  maxPrice: z.coerce.number().nonnegative().optional(),
+  minArea: z.coerce.number().int().nonnegative().optional(),
+  maxArea: z.coerce.number().int().nonnegative().optional(),
+  bedrooms: z.coerce.number().int().nonnegative().max(50).optional(),
+  bathrooms: z.coerce.number().int().nonnegative().max(50).optional(),
+  furnished: z.union([z.literal('true'), z.literal('false')]).optional(),
 });
 
 const availabilityQuery = z.object({
@@ -53,9 +64,28 @@ export default async function propertyRoutes(app: FastifyInstance) {
     const prisma = getPrisma();
 
     const where: Record<string, unknown> = {};
-    // Filters
+    // Filters — legacy names first, then their v2 aliases (v2 wins on collision)
     if (q.category) where.category = q.category;
     if (q.purpose) where.purpose = q.purpose;
+    if (q.propertyType) where.category = q.propertyType;
+    if (q.listingType) where.purpose = q.listingType;
+    if (q.city) where.city = q.city;
+    if (q.district) where.district = q.district;
+    if (q.bedrooms !== undefined) where.bedrooms = q.bedrooms;
+    if (q.bathrooms !== undefined) where.bathrooms = q.bathrooms;
+    if (q.furnished !== undefined) where.furnished = q.furnished === 'true';
+    if (q.minPrice !== undefined || q.maxPrice !== undefined) {
+      const price: Record<string, bigint> = {};
+      if (q.minPrice !== undefined) price.gte = BigInt(Math.floor(q.minPrice));
+      if (q.maxPrice !== undefined) price.lte = BigInt(Math.floor(q.maxPrice));
+      where.priceHalalahs = price;
+    }
+    if (q.minArea !== undefined || q.maxArea !== undefined) {
+      const area: Record<string, number> = {};
+      if (q.minArea !== undefined) area.gte = q.minArea;
+      if (q.maxArea !== undefined) area.lte = q.maxArea;
+      where.areaSqm = area;
+    }
 
     // Status: unauthenticated + non-admin can only see `available`.
     // Owner filter: unauthenticated cannot filter by ownerId.
@@ -317,5 +347,73 @@ export default async function propertyRoutes(app: FastifyInstance) {
         ranking: 'fallback',
       });
     }
+  });
+
+  /**
+   * PATCH /v1/properties/:id/details — owner-only write for the
+   * Property Data v2 fields.
+   *
+   * - All fields are optional; unspecified keys are left untouched.
+   * - The caller MUST be the property's `ownerId` (or an admin).
+   * - Old clients that never send this payload are unaffected — this
+   *   endpoint is purely additive.
+   * - We NEVER accept `ownerId`, `officeId`, `status`,
+   *   `advertisementLifecycle`, or any REGA / lifecycle field here —
+   *   those are governed by dedicated compliance routes.
+   */
+  const detailsBody = z
+    .object({
+      city: z.string().min(1).max(80).nullable().optional(),
+      district: z.string().min(1).max(120).nullable().optional(),
+      addressText: z.string().min(1).max(500).nullable().optional(),
+      latitude: z.number().min(-90).max(90).nullable().optional(),
+      longitude: z.number().min(-180).max(180).nullable().optional(),
+      priceHalalahs: z.union([z.number(), z.string()]).nullable().optional()
+        .transform((v) => v === null || v === undefined ? v : BigInt(String(v)))
+        .refine((v) => v === null || v === undefined || v >= 0n, 'priceHalalahs must be ≥ 0'),
+      pricePeriod: z.enum(['TOTAL', 'YEAR', 'MONTH', 'WEEK', 'DAY']).nullable().optional(),
+      areaSqm: z.number().int().min(0).max(1_000_000).nullable().optional(),
+      landAreaSqm: z.number().int().min(0).max(10_000_000).nullable().optional(),
+      builtAreaSqm: z.number().int().min(0).max(1_000_000).nullable().optional(),
+      bedrooms: z.number().int().min(0).max(50).nullable().optional(),
+      bathrooms: z.number().int().min(0).max(50).nullable().optional(),
+      livingRooms: z.number().int().min(0).max(50).nullable().optional(),
+      kitchens: z.number().int().min(0).max(20).nullable().optional(),
+      floorNumber: z.number().int().min(-10).max(200).nullable().optional(),
+      totalFloors: z.number().int().min(0).max(200).nullable().optional(),
+      propertyAgeYears: z.number().int().min(0).max(200).nullable().optional(),
+      yearBuilt: z.number().int().min(1800).max(2200).nullable().optional(),
+      furnished: z.boolean().nullable().optional(),
+      parkingSpaces: z.number().int().min(0).max(500).nullable().optional(),
+      hasElevator: z.boolean().nullable().optional(),
+      hasPool: z.boolean().nullable().optional(),
+      hasBalcony: z.boolean().nullable().optional(),
+      hasYard: z.boolean().nullable().optional(),
+      hasMaidRoom: z.boolean().nullable().optional(),
+      hasDriverRoom: z.boolean().nullable().optional(),
+      hasAirConditioning: z.boolean().nullable().optional(),
+    })
+    .strict(); // unknown / suspicious keys are rejected
+
+  app.patch('/v1/properties/:id/details', async (req, reply) => {
+    const caller = requireAuth(req, reply);
+    const { id } = req.params as { id: string };
+    const body = detailsBody.parse(req.body ?? {});
+    const prisma = getPrisma();
+    const existing = await prisma.property.findUnique({ where: { id }, select: { id: true, ownerId: true, status: true } });
+    if (!existing) throw notFound('property not found');
+    if (existing.ownerId !== caller.userId && !isAdminRole(caller.role)) {
+      // 404 rather than 403 — never confirm existence to non-owners.
+      throw notFound('property not found');
+    }
+    const data: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(body)) {
+      if (v !== undefined) data[k] = v; // null is a valid intent (clear the value)
+    }
+    if (Object.keys(data).length === 0) {
+      return jsonSafe(await prisma.property.findUnique({ where: { id } }));
+    }
+    const updated = await prisma.property.update({ where: { id }, data });
+    return jsonSafe(updated);
   });
 }

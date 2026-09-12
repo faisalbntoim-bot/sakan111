@@ -85,7 +85,7 @@ function locationMatchScore(property: any, ctx?: FeedContext): number {
 }
 
 function priceMatchScore(property: any, ctx?: FeedContext): number {
-  const price = positiveNumber(property?.price ?? property?.dailyRate);
+  const price = positiveNumber(property?.price ?? property?.priceHalalahs ?? property?.dailyRate);
   if (price === null || ctx?.minPrice === undefined && ctx?.maxPrice === undefined) return 0.5;
   const min = ctx?.minPrice ?? 0;
   const max = ctx?.maxPrice ?? Number.POSITIVE_INFINITY;

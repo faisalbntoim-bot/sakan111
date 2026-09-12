@@ -91,6 +91,18 @@ function listingMatch01(property: any, profile: UserInterestProfile, ctx?: Recom
   return weightRankScore(profile.listingTypeWeights, property?.purpose ?? property?.listingType);
 }
 
+/** 0..1 — property price fit against the request's min/max band. Neutral (0.5) when either side missing. */
+function priceFit01(property: any, ctx?: RecommendationContext): number {
+  if (!ctx || (ctx.minPrice === undefined && ctx.maxPrice === undefined)) return 0.5;
+  const raw = property?.price ?? property?.priceHalalahs ?? property?.dailyRate;
+  const price = typeof raw === 'bigint' ? Number(raw) : typeof raw === 'number' && Number.isFinite(raw) ? raw : null;
+  if (price === null || price <= 0) return 0.5;
+  const min = ctx.minPrice ?? 0;
+  const max = ctx.maxPrice ?? Number.POSITIVE_INFINITY;
+  if (price < min || price > max) return 0;
+  return 1;
+}
+
 function engagement01(property: any): number {
   // Uses whatever counters the row happens to carry; neutral if none.
   const saves = Math.max(0, Number(property?.savesCount ?? property?._count?.saves ?? 0) || 0);
@@ -121,6 +133,7 @@ export function calculateRecommendationScore(
     const fresh = freshness01(property);
     const quality = calculatePropertyQualityScore(property).total / 100;
     const eng = engagement01(property);
+    const price = priceFit01(property, ctx);
 
     // ---- Reasons (debug only) ----
     const id = property?.id;
@@ -132,15 +145,26 @@ export function calculateRecommendationScore(
     if (ctx?.propertyType && normEq(property?.category ?? property?.propertyType, ctx.propertyType)) reasons.push('property_type_match');
     else if ((property?.category || property?.propertyType) && (profile.propertyTypeWeights[property?.category ?? property?.propertyType] ?? 0) > 0) reasons.push('property_type_match');
     if (ctx?.listingType && normEq(property?.purpose ?? property?.listingType, ctx.listingType)) reasons.push('listing_type_match');
+    if (price === 1 && ctx && (ctx.minPrice !== undefined || ctx.maxPrice !== undefined)) reasons.push('similar_price');
     if (fresh >= 0.8) reasons.push('fresh_listing');
     if (quality >= 0.8) reasons.push('high_quality');
     if (profile.confidence === 0) reasons.push('cold_start');
+
+    // Price fit modulates the listing-type contribution when the caller
+    // provided a min/max band — a mismatched price halves the listing
+    // signal, a match preserves it. Missing band → neutral (no effect).
+    // This keeps the top-level weights unchanged while letting the price
+    // band influence ranking without introducing a new weight slot.
+    const listingBlended =
+      ctx && (ctx.minPrice !== undefined || ctx.maxPrice !== undefined)
+        ? listing * (0.5 + 0.5 * price)
+        : listing;
 
     const raw =
       affinity * W.affinity +
       location * W.location +
       type * W.propertyType +
-      listing * W.listingType +
+      listingBlended * W.listingType +
       fresh * W.freshness +
       quality * W.quality +
       eng * W.engagement;

@@ -121,11 +121,11 @@ function scoreCompleteness(property: any): number {
   let s = 0;
   if (looksTruthyString(property?.title ?? property?.listingNumber)) s += 4;
   if (stringLen(property?.description) >= 80) s += 4;
-  if (positiveNumber(property?.price ?? property?.dailyRate ?? property?.grossAmountHalalahs) !== null) s += 4;
+  if (positiveNumber(property?.price ?? property?.priceHalalahs ?? property?.dailyRate ?? property?.grossAmountHalalahs) !== null) s += 4;
   if (looksTruthyString(property?.type ?? property?.category)) s += 3;
   if (looksTruthyString(property?.city)) s += 3;
   if (looksTruthyString(property?.district ?? property?.neighborhood)) s += 3;
-  if (positiveNumber(property?.area ?? property?.size)) s += 2;
+  if (positiveNumber(property?.area ?? property?.areaSqm ?? property?.size)) s += 2;
   if (positiveNumber(property?.bedrooms ?? property?.rooms) || positiveNumber(property?.bathrooms ?? property?.bath)) s += 2;
   return clamp(s, CLAMPS.completeness);
 }
@@ -176,7 +176,7 @@ function scoreAdvertiserTrust(property: any): number {
 }
 
 function scorePriceSignal(property: any): number {
-  const price = positiveNumber(property?.price ?? property?.dailyRate ?? property?.grossAmountHalalahs);
+  const price = positiveNumber(property?.price ?? property?.priceHalalahs ?? property?.dailyRate ?? property?.grossAmountHalalahs);
   if (price === null) return 9; // neutral (8..10 per spec)
   let s = 5; // valid numeric price
   if (price > 100) s += 3; // not extremely-low / suspicious-zero

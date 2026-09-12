@@ -57,12 +57,12 @@ export function scoreSimilarity(target: any, candidate: any): number {
     const cRooms = num(candidate.bedrooms ?? candidate.rooms);
     if (tRooms !== null && cRooms !== null && Math.abs(tRooms - cRooms) <= 1) s += 10;
 
-    const tArea = num(target.area ?? target.size);
-    const cArea = num(candidate.area ?? candidate.size);
+    const tArea = num(target.area ?? target.areaSqm ?? target.size);
+    const cArea = num(candidate.area ?? candidate.areaSqm ?? candidate.size);
     if (tArea !== null && cArea !== null && within(cArea, tArea, 0.25)) s += 10;
 
-    const tPrice = num(target.price ?? target.dailyRate);
-    const cPrice = num(candidate.price ?? candidate.dailyRate);
+    const tPrice = num(target.price ?? target.priceHalalahs ?? target.dailyRate);
+    const cPrice = num(candidate.price ?? candidate.priceHalalahs ?? candidate.dailyRate);
     if (tPrice !== null && cPrice !== null && within(cPrice, tPrice, 0.25)) s += 10;
 
     // Soft tie-breakers — never dominate.
