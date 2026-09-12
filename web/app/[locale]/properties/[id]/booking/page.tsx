@@ -37,6 +37,7 @@ import { BookingChrome } from '@/components/booking/BookingChrome';
 import { PropertyMiniCard } from '@/components/booking/PropertyMiniCard';
 import { RtlCalendar } from '@/components/booking/RtlCalendar';
 import { GuestsPicker } from '@/components/booking/GuestsPicker';
+import { SimilarPropertiesSection } from '@/components/SimilarPropertiesSection';
 
 // Annual rent price model — daily rate × ~30 nights of the year is a poor
 // proxy for a monthly rent, so we derive the monthly rate from the SPA's
@@ -330,6 +331,8 @@ export default function BookingPage({ params }: { params: { locale: string; id: 
             )}
           </ul>
         </section>
+
+        <SimilarPropertiesSection propertyId={params.id} limit={6} />
       </main>
 
       {/* Sticky bottom bar */}
