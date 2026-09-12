@@ -110,6 +110,52 @@ model Property {
   regaSuspendReason      String?
   regaComplianceRef      String?                     // opaque external reference
 
+  // ---- Property Data v2 (all nullable — safe defaults, no backfill invented) ----
+  // Location
+  city            String?                            // e.g. "الرياض"
+  district        String?                            // e.g. "حي الملقا"
+  addressText     String?                            // free-form full address (owner-entered)
+  latitude        Float?                             // -90 .. 90
+  longitude       Float?                             // -180 .. 180
+
+  // Commercial
+  priceHalalahs   BigInt?                            // minor units — same convention as Booking.grossAmountHalalahs
+  pricePeriod     String?                            // TOTAL | YEAR | MONTH | WEEK | DAY
+
+  // Dimensions (all in square metres; ints — cm-level precision is not useful for listings)
+  areaSqm         Int?                               // primary listed area
+  landAreaSqm     Int?                               // for villas/lands
+  builtAreaSqm    Int?                               // for villas — the "بناء" figure
+
+  // Rooms
+  bedrooms        Int?
+  bathrooms       Int?
+  livingRooms     Int?
+  kitchens        Int?
+
+  // Building
+  floorNumber        Int?
+  totalFloors        Int?
+  propertyAgeYears   Int?
+  yearBuilt          Int?
+
+  // Amenities (boolean flags — nullable → "unknown", false → "confirmed absent")
+  furnished             Boolean?
+  parkingSpaces         Int?
+  hasElevator           Boolean?
+  hasPool               Boolean?
+  hasBalcony            Boolean?
+  hasYard               Boolean?
+  hasMaidRoom           Boolean?
+  hasDriverRoom         Boolean?
+  hasAirConditioning    Boolean?
+
+  // Publishing timestamps (independent of REGA lifecycle — an owner may
+  // schedule a future publish or set an expiry). Nullable to preserve
+  // backward compatibility for rows created before v2.
+  publishedAt     DateTime?
+  expiresAt       DateTime?
+
   owner  User          @relation("PropertyOwner", fields: [ownerId], references: [id])
   hosts  PropertyHost[]
   bookings Booking[]
@@ -118,6 +164,11 @@ model Property {
   @@index([ownerId])
   @@index([advertisementLifecycle])
   @@index([regaLicenseNumber])
+  // Property Data v2 indexes — narrow, high-value only
+  @@index([city, district])
+  @@index([status, publishedAt])
+  @@index([category, purpose])
+  @@index([priceHalalahs])
 }
 
 // =========================================================================
