@@ -47,6 +47,11 @@ const schema = z.object({
    *  Quality × Match × Freshness. Default off — the existing feed
    *  behaviour is unchanged. */
   SMART_FEED_ENABLED: z.coerce.boolean().default(false),
+  /** Internal event tracking (analytics/event-tracking-service.ts).
+   *  When true, `trackEvent()` writes to `UserEvent` and
+   *  POST /v1/events is live. Default off — no writes happen and the
+   *  endpoint replies with 204 (safe no-op for the frontend). */
+  EVENT_TRACKING_ENABLED: z.coerce.boolean().default(false),
 });
 
 export const config = schema.parse(process.env);

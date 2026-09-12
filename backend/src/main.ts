@@ -43,6 +43,7 @@ import adminPropertyRoutes from './routes/admin.properties.js';
 import analyticsRoutes from './routes/analytics.js';
 import marketRoutes from './routes/market.js';
 import adminOverviewRoutes from './routes/admin.overview.js';
+import eventRoutes from './routes/events.js';
 
 export async function buildServer() {
   const app = Fastify({
@@ -108,6 +109,7 @@ export async function buildServer() {
   await app.register(analyticsRoutes);
   await app.register(marketRoutes);
   await app.register(adminOverviewRoutes);
+  await app.register(eventRoutes);
 
   app.setErrorHandler((err, req, reply) => {
     // Duck-type on httpStatus so bundler / cross-module identity issues don't
