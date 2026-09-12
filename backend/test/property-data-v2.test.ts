@@ -342,3 +342,64 @@ describe('similar-properties with v2 fields', () => {
     expect(ranked.length).toBeGreaterThan(0);
   });
 });
+
+// ---- 7. Owner-side create + list -----------------------------------
+
+describe('GET / POST /v1/properties/mine', () => {
+  it('creates a DRAFT hidden property owned by the caller', async () => {
+    const o = await makeOwner('+9663000030');
+    const app = await server();
+    const res = await app.inject({
+      method: 'POST', url: '/v1/properties/mine',
+      headers: { 'x-user-id': o.id, 'x-user-role': 'OWNER', 'content-type': 'application/json' },
+      payload: { category: 'apartment', purpose: 'rent' },
+    });
+    expect(res.statusCode).toBe(201);
+    const body = res.json() as { id: string; status: string; advertisementLifecycle: string; ownerId: string };
+    expect(body.ownerId).toBe(o.id);
+    expect(body.status).toBe('hidden');
+    expect(body.advertisementLifecycle).toBe('DRAFT');
+    await app.close();
+  });
+
+  it('POST rejects unknown keys and cannot spoof ownerId', async () => {
+    const o = await makeOwner('+9663000031');
+    const app = await server();
+    const res = await app.inject({
+      method: 'POST', url: '/v1/properties/mine',
+      headers: { 'x-user-id': o.id, 'x-user-role': 'OWNER', 'content-type': 'application/json' },
+      payload: { category: 'apartment', purpose: 'rent', ownerId: 'somebody-else', status: 'available' },
+    });
+    expect(res.statusCode).toBe(400);
+    await app.close();
+  });
+
+  it('POST requires auth (401 without caller)', async () => {
+    const app = await server();
+    const res = await app.inject({
+      method: 'POST', url: '/v1/properties/mine',
+      headers: { 'content-type': 'application/json' },
+      payload: { category: 'apartment', purpose: 'rent' },
+    });
+    expect(res.statusCode).toBe(401);
+    await app.close();
+  });
+
+  it('GET /v1/properties/mine returns only the caller\'s properties', async () => {
+    const me = await makeOwner('+9663000032');
+    const other = await makeOwner('+9663000033');
+    await makeBareProperty(me.id);
+    await makeBareProperty(me.id);
+    await makeBareProperty(other.id);
+    const app = await server();
+    const res = await app.inject({
+      method: 'GET', url: '/v1/properties/mine',
+      headers: { 'x-user-id': me.id, 'x-user-role': 'OWNER' },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { items: { ownerId: string }[] };
+    expect(body.items.length).toBe(2);
+    for (const it of body.items) expect(it.ownerId).toBe(me.id);
+    await app.close();
+  });
+});

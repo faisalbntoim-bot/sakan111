@@ -416,4 +416,57 @@ export default async function propertyRoutes(app: FastifyInstance) {
     const updated = await prisma.property.update({ where: { id }, data });
     return jsonSafe(updated);
   });
+
+  /**
+   * GET /v1/properties/mine — caller's own properties for the "عقاراتي"
+   * screen. Returns every listing the caller owns, regardless of status
+   * or REGA lifecycle (owner sees drafts + hidden + published alike).
+   */
+  app.get('/v1/properties/mine', async (req, reply) => {
+    const caller = requireAuth(req, reply);
+    const rows = await getPrisma().property.findMany({
+      where: { ownerId: caller.userId },
+      orderBy: { updatedAt: 'desc' },
+      take: 200,
+    });
+    return jsonSafe({ items: rows });
+  });
+
+  /**
+   * POST /v1/properties/mine — create a DRAFT property owned by the
+   * caller. Only the two required-by-schema fields (`category`,
+   * `purpose`) are accepted here; the owner fills the rest via
+   * PATCH /v1/properties/:id/details afterwards.
+   *
+   * The row is created with:
+   *   - ownerId = caller.userId (server-derived; never trusted from body)
+   *   - status = 'hidden' so a bare draft never appears in the public feed
+   *   - advertisementLifecycle = 'DRAFT' (schema default)
+   *
+   * Publishing still requires the existing REGA compliance flow
+   * (submit → verify → publish) — this endpoint deliberately does NOT
+   * shortcut it.
+   */
+  const createBody = z.object({
+    category: z.string().min(2).max(40),
+    purpose: z.string().min(2).max(40),
+    currency: z.string().min(3).max(3).default('SAR'),
+  }).strict();
+
+  app.post('/v1/properties/mine', async (req, reply) => {
+    const caller = requireAuth(req, reply);
+    const body = createBody.parse(req.body ?? {});
+    const listingNumber = `SH-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`.toUpperCase();
+    const created = await getPrisma().property.create({
+      data: {
+        listingNumber,
+        ownerId: caller.userId,
+        category: body.category,
+        purpose: body.purpose,
+        currency: body.currency,
+        status: 'hidden', // drafts are never publicly listed
+      },
+    });
+    return reply.code(201).send(jsonSafe(created));
+  });
 }
