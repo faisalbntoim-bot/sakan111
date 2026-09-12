@@ -21,6 +21,8 @@ import { jsonSafe } from '../money.js';
 import { buildPreferenceProfile } from '../recommendation/preferences.js';
 import { computeQualityScore } from '../recommendation/quality.js';
 import { scorePropertyForUser, scorePropertyColdStart } from '../recommendation/scorer.js';
+import { calculateFeedScore, type FeedContext } from '../services/feed-ranking.js';
+import { diversifyFeed } from '../services/feed-diversity.js';
 
 const listQuery = z.object({
   page: z.coerce.number().int().min(1).max(1000).default(1),
@@ -170,6 +172,17 @@ export default async function propertyRoutes(app: FastifyInstance) {
     page: z.coerce.number().int().min(1).max(1000).default(1),
     pageSize: z.coerce.number().int().min(1).max(50).default(20),
     personalized: z.union([z.literal('true'), z.literal('false'), z.boolean()]).optional(),
+    // Smart-feed v1 (services/feed-ranking.ts). Backward-compatible: when
+    // `sort` is anything other than 'smart', the existing behaviour is
+    // untouched. Enabling requires SMART_FEED_ENABLED=true in env.
+    sort: z.enum(['default', 'smart']).default('default'),
+    city: z.string().max(80).optional(),
+    district: z.string().max(120).optional(),
+    propertyType: z.string().max(40).optional(),
+    listingType: z.string().max(40).optional(),
+    minPrice: z.coerce.number().nonnegative().optional(),
+    maxPrice: z.coerce.number().nonnegative().optional(),
+    bedrooms: z.coerce.number().int().nonnegative().optional(),
   });
 
   app.get('/v1/properties/feed', async (req) => {
@@ -187,6 +200,49 @@ export default async function propertyRoutes(app: FastifyInstance) {
       orderBy: { updatedAt: 'desc' },
       take: q.pageSize * 5,
     });
+
+    // ---- Smart feed v1 --------------------------------------------------
+    // Handled BEFORE the personalized/default paths so the query-string
+    // opt-in wins even when the recommendation flag is off. Returns a
+    // scored + diversified page. Falls back to the default order on any
+    // exception so a ranker bug can NEVER break the public feed.
+    if (q.sort === 'smart' && config.SMART_FEED_ENABLED) {
+      try {
+        const ctx: FeedContext = {
+          city: q.city,
+          district: q.district,
+          propertyType: q.propertyType,
+          listingType: q.listingType,
+          minPrice: q.minPrice,
+          maxPrice: q.maxPrice,
+          bedrooms: q.bedrooms,
+        };
+        const scored = pool.map((p) => {
+          const r = calculateFeedScore(p, ctx);
+          return { property: p, ...r };
+        });
+        scored.sort((a, b) => b.score - a.score);
+        const diversified = diversifyFeed(scored);
+        const paged = diversified.slice((q.page - 1) * q.pageSize, q.page * q.pageSize);
+        // Debug fields (_score, _reasons, qualityScore) are exposed only
+        // in non-production envs so prod callers see the same public
+        // shape as the default feed.
+        const includeDebug = config.NODE_ENV !== 'production';
+        return jsonSafe({
+          items: paged.map((s) => ({
+            ...publicProjection(s.property),
+            ...(includeDebug ? { _score: s.score, _reasons: s.reasons, qualityScore: s.qualityScore } : {}),
+          })),
+          page: q.page,
+          pageSize: q.pageSize,
+          total: scored.length,
+          ranking: 'smart',
+        });
+      } catch (err) {
+        req.log.error({ err }, 'smart feed ranker failed; falling back to default');
+        // fall through to default response
+      }
+    }
 
     if (!wantPersonalized) {
       const items = pool.slice((q.page - 1) * q.pageSize, q.page * q.pageSize).map(publicProjection);

@@ -42,6 +42,11 @@ const schema = z.object({
   MARKET_PULSE_ENABLED: z.coerce.boolean().default(false),
   /** Minimum event sample size for market pulse growth / trending to be reported. */
   MARKET_MIN_SAMPLE_SIZE: z.coerce.number().int().min(1).default(30),
+  /** Smart-feed ranking (services/feed-ranking.ts). When true, GET
+   *  /v1/properties/feed accepts ?sort=smart and ranks candidates by
+   *  Quality × Match × Freshness. Default off — the existing feed
+   *  behaviour is unchanged. */
+  SMART_FEED_ENABLED: z.coerce.boolean().default(false),
 });
 
 export const config = schema.parse(process.env);
