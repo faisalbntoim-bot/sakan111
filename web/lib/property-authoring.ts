@@ -1,12 +1,16 @@
 /**
  * Property Authoring v1 — typed API client.
  *
- * Auth: the owner supplies a Bearer JWT once (persisted in
- * sessionStorage under `sh_owner_token`). This module does NOT mint
- * tokens — the real OTP → JWT exchange happens through the existing
- * /v1/auth endpoints in a separate flow. If the token is missing we
- * fail fast with a clear error so the caller can surface a sign-in
- * prompt rather than firing anonymous requests.
+ * Auth: the token is minted by the OTP → JWT flow on the owner login
+ * page (`/[locale]/owner/login`), which calls the existing backend
+ * /v1/auth/otp + /v1/auth/otp/verify endpoints and stores the
+ * resulting `accessToken` in sessionStorage under `sh_owner_token`.
+ *
+ * This module never exposes the token in the UI. It is:
+ *   - read from sessionStorage
+ *   - sent as `Authorization: Bearer <token>` on every request
+ *   - cleared (`setOwnerToken(null)`) on 401/403 so the page can
+ *     redirect to the login route
  *
  * All calls are best-effort and Arabic-friendly on failure — the
  * caller must never see a raw stack trace.
@@ -114,6 +118,9 @@ async function req<T>(path: string, init: RequestInit = {}): Promise<T> {
     throw new AuthoringApiError('NETWORK', 'تعذّر الوصول إلى الخادم. تحقّق من الاتصال بالإنترنت.', 0);
   }
   if (res.status === 401 || res.status === 403) {
+    // Clear the dead token so the next page render redirects to login
+    // instead of re-firing a doomed request.
+    setOwnerToken(null);
     throw new AuthoringApiError('AUTH_EXPIRED', 'انتهت الجلسة. الرجاء تسجيل الدخول من جديد.', res.status);
   }
   if (res.status === 404) {
@@ -135,6 +142,66 @@ async function req<T>(path: string, init: RequestInit = {}): Promise<T> {
 }
 
 // ---------- Public API ----------
+
+export type OwnerMe = {
+  id: string;
+  phone: string;
+  email: string | null;
+  nameAr: string;
+  nameEn: string | null;
+  roles: string[];
+  currentRole: string;
+};
+
+/**
+ * Probe the current session. Resolves to the caller identity on 200
+ * or throws AuthoringApiError with code 'AUTH_EXPIRED' on 401/403.
+ * Callers use this to decide whether to render the page or redirect
+ * to /[locale]/owner/login.
+ */
+export function fetchOwnerMe(): Promise<OwnerMe> {
+  return req<OwnerMe>(`/v1/auth/me`, { method: 'GET' });
+}
+
+/** Mint an owner session by exchanging OTP request+code for an access token. */
+export async function requestOwnerOtp(phone: string): Promise<{ requestId: string; expiresInSeconds: number }> {
+  assertConfigured();
+  const res = await fetch(`${API_BASE}/v1/auth/otp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ phone }),
+  }).catch(() => null);
+  if (!res) throw new AuthoringApiError('NETWORK', 'تعذّر الوصول إلى الخادم.', 0);
+  if (res.status === 429) throw new AuthoringApiError('RATE_LIMIT', 'محاولات كثيرة. حاول بعد قليل.', 429);
+  if (!res.ok) throw new AuthoringApiError('SERVER', 'تعذّر طلب رمز التحقق. تأكد من رقم الجوال.', res.status);
+  return await res.json() as { requestId: string; expiresInSeconds: number };
+}
+
+export async function verifyOwnerOtp(input: { requestId: string; phone: string; code: string; nameAr?: string }): Promise<{
+  user: { id: string; phone: string; nameAr: string; role: string };
+  accessToken: string;
+  refreshToken: string;
+  expiresIn: number;
+}> {
+  assertConfigured();
+  const res = await fetch(`${API_BASE}/v1/auth/otp/verify`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  }).catch(() => null);
+  if (!res) throw new AuthoringApiError('NETWORK', 'تعذّر الوصول إلى الخادم.', 0);
+  if (res.status === 401) throw new AuthoringApiError('VALIDATION', 'الرمز غير صحيح أو انتهت صلاحيته.', 401);
+  if (!res.ok) throw new AuthoringApiError('SERVER', 'تعذّر التحقق من الرمز.', res.status);
+  const body = await res.json() as { user: { id: string; phone: string; nameAr: string; role: string }; accessToken: string; refreshToken: string; expiresIn: number };
+  // Persist the token so subsequent authoring calls attach it via getOwnerToken().
+  setOwnerToken(body.accessToken);
+  return body;
+}
+
+/** Clear the local session token. Server refresh-token revocation is a follow-up. */
+export function clearOwnerSession(): void {
+  setOwnerToken(null);
+}
 
 export function listMyProperties(): Promise<{ items: PropertyRow[] }> {
   return req<{ items: PropertyRow[] }>(`/v1/properties/mine`, { method: 'GET' });

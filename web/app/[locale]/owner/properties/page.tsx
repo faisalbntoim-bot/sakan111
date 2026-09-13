@@ -16,11 +16,11 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
-  createPropertyDraft, getMyProperty, listMyProperties, submitPropertyForReview,
-  updatePropertyDetails, getOwnerToken, setOwnerToken,
-  type PropertyRow, type PricePeriod, AuthoringApiError,
+  clearOwnerSession, createPropertyDraft, fetchOwnerMe, getMyProperty,
+  listMyProperties, submitPropertyForReview, updatePropertyDetails,
+  type OwnerMe, type PropertyRow, type PricePeriod, AuthoringApiError,
 } from '@/lib/property-authoring';
 import { halalahsFromSAR, sarFromHalalahs, formatHalalahsAr } from '@/lib/property-money';
 import { computeCompleteness } from '@/lib/property-completeness';
@@ -60,38 +60,6 @@ function periodOptionsFor(purpose: string): { value: PricePeriod; labelAr: strin
   if (purpose === 'commercial_rent') return [{ value: 'YEAR', labelAr: 'سنويًا' }, { value: 'MONTH', labelAr: 'شهريًا' }];
   // rent
   return [{ value: 'YEAR', labelAr: 'سنويًا' }, { value: 'MONTH', labelAr: 'شهريًا' }];
-}
-
-// ---- Sign-in gate --------------------------------------------------
-
-function SignInGate({ onSaved, locale }: { onSaved: () => void; locale: string }) {
-  const [token, setToken] = useState('');
-  return (
-    <div className="pa-signin">
-      <h2>تسجيل الدخول للمالك</h2>
-      <p className="pa-muted">
-        هذه الصفحة تحتاج جلسة مصادق عليها. الصق رمز الجلسة (JWT) الصادر من واجهة تسجيل الدخول الرسمية
-        في التطبيق، أو <Link href={`/${locale}/admin/login`}>تسجيل الدخول</Link>.
-      </p>
-      <label className="pa-field">
-        <span>رمز الجلسة</span>
-        <input
-          type="password"
-          value={token}
-          onChange={(e) => setToken(e.target.value)}
-          placeholder="eyJhbGciOi…"
-          autoComplete="off"
-        />
-      </label>
-      <button
-        className="pa-btn pa-btn-primary"
-        onClick={() => { setOwnerToken(token); onSaved(); }}
-        disabled={token.trim().length < 20}
-      >
-        متابعة
-      </button>
-    </div>
-  );
 }
 
 // ---- Property list "عقاراتي" --------------------------------------
@@ -554,13 +522,38 @@ function CreateDraft({ onCancel, onCreated }: { onCancel: () => void; onCreated:
 // ---- Page wrapper --------------------------------------------------
 
 export default function OwnerPropertiesPage({ params }: { params: { locale: string } }) {
-  const [signedIn, setSignedIn] = useState<boolean | null>(null);
+  const router = useRouter();
+  const [me, setMe] = useState<OwnerMe | null>(null);
   const [rows, setRows] = useState<PropertyRow[] | null>(null);
   const [editing, setEditing] = useState<PropertyRow | null>(null);
   const [creating, setCreating] = useState(false);
   const [pageErrorAr, setPageErrorAr] = useState<string | null>(null);
 
-  useEffect(() => { setSignedIn(!!getOwnerToken()); }, []);
+  /** Redirect to the owner login page, preserving where we wanted to land. */
+  const redirectToLogin = useCallback(() => {
+    const here = typeof window !== 'undefined' ? window.location.pathname + window.location.search : `/${params.locale}/owner/properties`;
+    router.replace(`/${params.locale}/owner/login?next=${encodeURIComponent(here)}`);
+  }, [router, params.locale]);
+
+  // On mount: verify the session server-side. No token guessing.
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const identity = await fetchOwnerMe();
+        if (alive) setMe(identity);
+      } catch (e) {
+        if (!alive) return;
+        // AUTH_EXPIRED / no token → send to login. Any other error → show it.
+        if (e instanceof AuthoringApiError && (e.code === 'AUTH_EXPIRED' || e.code === 'NO_AUTH')) {
+          redirectToLogin();
+        } else {
+          setPageErrorAr(e instanceof AuthoringApiError ? e.message : 'تعذّر التحقّق من الجلسة.');
+        }
+      }
+    })();
+    return () => { alive = false; };
+  }, [redirectToLogin]);
 
   const reload = useCallback(async () => {
     setPageErrorAr(null);
@@ -568,40 +561,69 @@ export default function OwnerPropertiesPage({ params }: { params: { locale: stri
       const list = await listMyProperties();
       setRows(list.items ?? []);
     } catch (e) {
+      if (e instanceof AuthoringApiError && (e.code === 'AUTH_EXPIRED' || e.code === 'NO_AUTH')) {
+        redirectToLogin();
+        return;
+      }
       const msg = e instanceof AuthoringApiError ? e.message : 'تعذر تحميل عقاراتك.';
       setPageErrorAr(msg);
       setRows([]);
     }
-  }, []);
+  }, [redirectToLogin]);
 
-  useEffect(() => { if (signedIn) void reload(); }, [signedIn, reload]);
+  useEffect(() => { if (me) void reload(); }, [me, reload]);
+
+  const signOut = useCallback(() => {
+    clearOwnerSession();
+    setMe(null);
+    setRows(null);
+    redirectToLogin();
+  }, [redirectToLogin]);
+
+  if (!me) {
+    return (
+      <>
+        <PropertyAuthoringStyles />
+        <main className="pa-page" dir="rtl">
+          {pageErrorAr
+            ? <div role="alert" className="pa-alert pa-alert-err">{pageErrorAr}</div>
+            : <div className="pa-muted" role="status">جارٍ التحقّق من الجلسة…</div>}
+        </main>
+      </>
+    );
+  }
 
   return (
     <>
       <PropertyAuthoringStyles />
       <main className="pa-page" dir="rtl">
-        {!signedIn && <SignInGate locale={params.locale} onSaved={() => setSignedIn(true)} />}
-
-        {signedIn && !editing && !creating && (
+        {!editing && !creating && (
           <>
+            <div className="pa-who">
+              <span>مرحبًا، {me.nameAr}</span>
+              <button type="button" className="pa-btn pa-btn-ghost" onClick={signOut}>تسجيل الخروج</button>
+            </div>
             {pageErrorAr ? <div role="alert" className="pa-alert pa-alert-err">{pageErrorAr}</div> : null}
             {rows === null
               ? <div className="pa-muted">جارٍ التحميل…</div>
               : <PropertyList rows={rows} onCreate={() => setCreating(true)} onEdit={async (id) => {
                   try { setEditing(await getMyProperty(id)); }
-                  catch (e) { setPageErrorAr(e instanceof AuthoringApiError ? e.message : 'تعذّر فتح العقار.'); }
+                  catch (e) {
+                    if (e instanceof AuthoringApiError && (e.code === 'AUTH_EXPIRED' || e.code === 'NO_AUTH')) { redirectToLogin(); return; }
+                    setPageErrorAr(e instanceof AuthoringApiError ? e.message : 'تعذّر فتح العقار.');
+                  }
                 }} />}
           </>
         )}
 
-        {signedIn && creating && (
+        {creating && (
           <CreateDraft
             onCancel={() => setCreating(false)}
             onCreated={(row) => { setCreating(false); setEditing(row); void reload(); }}
           />
         )}
 
-        {signedIn && editing && (
+        {editing && (
           <Editor
             initial={editing}
             onDone={async () => { setEditing(null); await reload(); }}
@@ -621,8 +643,7 @@ function PropertyAuthoringStyles() {
       .pa-page { max-width: 920px; margin: 0 auto; padding: clamp(16px, 3vw, 32px); color: var(--ink); }
       .pa-header { display: flex; justify-content: space-between; align-items: center; margin-block-end: 20px; }
       .pa-header h1 { font-size: clamp(20px, 3vw, 26px); font-weight: 700; }
-      .pa-signin { max-width: 520px; margin: 40px auto; background: var(--ground-2); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 24px; box-shadow: var(--shadow); }
-      .pa-signin h2 { font-size: 20px; font-weight: 700; margin-block-end: 8px; }
+      .pa-who { display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: var(--ink-2); margin-block-end: 12px; }
       .pa-muted { color: var(--ink-2); font-size: 13px; }
       .pa-btn { padding: 10px 18px; border-radius: var(--radius); border: 1px solid var(--line); background: var(--ground-2); color: var(--ink); font-family: inherit; font-size: 14px; cursor: pointer; min-height: 44px; }
       .pa-btn:hover:not(:disabled) { border-color: var(--accent); }
