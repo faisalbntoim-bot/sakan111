@@ -23,7 +23,9 @@ type Overview = {
 
 type Period = 'today' | '7d' | '30d';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || '';
+// The dashboard now talks to `/admin-api/dashboard` on the same origin.
+// The upstream backend URL lives only on the Next.js server (BFF route),
+// so NEXT_PUBLIC_API_BASE_URL is no longer needed for this surface.
 
 const AR = ['٠','١','٢','٣','٤','٥','٦','٧','٨','٩'] as const;
 const fmt = (n: number) => n.toLocaleString('ar-SA');
@@ -41,17 +43,20 @@ export default function AdminDashboardPage({ params }: { params: { locale: strin
 
   const load = useCallback(async (p: Period) => {
     setLoading(true); setErr(null);
-    if (!API_BASE) {
-      setErr('لا يوجد اتصال بالخادم — عرّف NEXT_PUBLIC_API_BASE_URL أولًا.');
-      setLoading(false); return;
-    }
     try {
-      const res = await fetch(`${API_BASE}/v1/admin/dashboard?period=${p}`, {
+      // Same-origin BFF. The browser never talks to /v1/admin/* directly;
+      // /admin-api/dashboard is a Next.js Route Handler that verifies the
+      // admin cookie and forwards to the backend with a server-only Bearer.
+      const res = await fetch(`/admin-api/dashboard?period=${p}`, {
         credentials: 'include',
         headers: { 'accept': 'application/json' },
       });
       if (res.status === 401 || res.status === 403) {
         setErr('غير مصرَّح — سجّل دخول الإدارة أولًا.');
+        setLoading(false); return;
+      }
+      if (res.status === 503) {
+        setErr('خدمة لوحة الإدارة غير مُهيَّأة على الخادم — راجِع متغيرات البيئة.');
         setLoading(false); return;
       }
       if (!res.ok) { setErr(`فشل تحميل البيانات (${res.status})`); setLoading(false); return; }

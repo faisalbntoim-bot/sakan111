@@ -58,6 +58,20 @@ const schema = z.object({
    *  — endpoints still respond (safe fallback: fresh + high-quality
    *  listings) so the frontend can call blindly during rollout. */
   RECOMMENDATIONS_ENABLED: z.coerce.boolean().default(false),
+
+  // ---- Internal service-account token exchange (BFF for the Next.js admin) ----
+  /** Shared secret the Next.js admin BFF presents (as a Bearer) to
+   *  POST /v1/auth/internal-admin-token in order to receive a short-lived
+   *  ADMIN JWT. Must be at least 32 chars; there is NO default value on
+   *  purpose. If unset the endpoint 404s as if it did not exist.
+   *  Never appears in logs or responses. */
+  SAKAN_INTERNAL_ADMIN_SECRET: z.string().min(32).optional(),
+  /** cuid of a real User row whose Role includes ADMIN or SUPER_ADMIN.
+   *  The exchange endpoint looks the user up in Prisma and refuses to
+   *  mint a token unless (a) the row exists and (b) it currently owns
+   *  one of those roles. Rotating the row's role revokes future issuance
+   *  automatically. */
+  SAKAN_INTERNAL_ADMIN_USER_ID: z.string().optional(),
 });
 
 export const config = schema.parse(process.env);

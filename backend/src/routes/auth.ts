@@ -10,12 +10,14 @@
 
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import { timingSafeEqual } from 'node:crypto';
 import { getPrisma } from '../db.js';
 import { requestOtp, verifyOtp } from '../auth/otp.js';
-import { issueTokenPair, rotateRefreshToken, revokeRefreshToken } from '../auth/jwt.js';
+import { ACCESS_TTL_SECONDS, issueTokenPair, rotateRefreshToken, revokeRefreshToken, signAccessToken } from '../auth/jwt.js';
 import { requireAuth, type Role } from '../auth/rbac.js';
 import { audit } from '../audit.js';
-import { badRequest, notFound } from '../errors.js';
+import { badRequest, forbidden, notFound, unauthorized } from '../errors.js';
+import { config } from '../config.js';
 
 const requestSchema = z.object({ phone: z.string().min(6).max(20) });
 const verifySchema = z.object({
@@ -78,6 +80,73 @@ export default async function authRoutes(app: FastifyInstance) {
     }
     await audit({ actorId: caller.userId, action: 'AUTH.LOGOUT', entity: 'User', entityId: caller.userId });
     return { ok: true };
+  });
+
+  /**
+   * POST /v1/auth/internal-admin-token — server-to-server ADMIN JWT exchange.
+   *
+   * Used by the Next.js BFF to mint a short-lived ADMIN access token so
+   * it can call /v1/admin/* without ever forwarding a Bearer to the
+   * browser. It NEVER shortcuts requireAuth / requireRole: it mints a
+   * real JWT for a real ADMIN user, then the normal RBAC guard verifies
+   * that JWT on the downstream request like any other.
+   *
+   * Hardening:
+   *   - Feature-off default: unless BOTH `SAKAN_INTERNAL_ADMIN_SECRET`
+   *     (≥32 chars) and `SAKAN_INTERNAL_ADMIN_USER_ID` are configured,
+   *     the endpoint 404s as if it did not exist.
+   *   - The presented secret comes in the Authorization header
+   *     (`Bearer <secret>`), constant-time compared with `timingSafeEqual`.
+   *     The secret never appears in a response, an error message, or a
+   *     log line. On mismatch we return a generic 401.
+   *   - The configured user is fetched from Prisma with roles; if the
+   *     row is missing OR does not currently own ADMIN / SUPER_ADMIN,
+   *     the endpoint refuses with 403. Rotating the user out of the
+   *     admin role invalidates future issuance immediately.
+   *   - Rate limiting is inherited from the global @fastify/rate-limit
+   *     that main.ts installs on the whole app.
+   */
+  app.post('/v1/auth/internal-admin-token', async (req, reply) => {
+    const secret = config.SAKAN_INTERNAL_ADMIN_SECRET;
+    const uid = config.SAKAN_INTERNAL_ADMIN_USER_ID;
+    if (!secret || !uid) throw notFound(); // feature disabled → not-advertised
+
+    // Extract Bearer without leaking anything about parse failure.
+    const authz = req.headers['authorization'];
+    let presented = '';
+    if (typeof authz === 'string' && authz.startsWith('Bearer ')) {
+      presented = authz.slice(7).trim();
+    }
+    // Constant-time compare against padded buffers.
+    const a = Buffer.from(presented);
+    const b = Buffer.from(secret);
+    const len = Math.max(a.length, b.length);
+    const ap = Buffer.alloc(len); a.copy(ap);
+    const bp = Buffer.alloc(len); b.copy(bp);
+    const ok = a.length === b.length && timingSafeEqual(ap, bp);
+    if (!ok) throw unauthorized('invalid service credential');
+
+    // Look up the real user + roles. Refuse if the row is gone or if the
+    // configured id lost its admin membership since last restart.
+    const user = await getPrisma().user.findUnique({
+      where: { id: uid },
+      include: { roles: true },
+    });
+    if (!user) throw forbidden('service user not found');
+    // Only ADMIN / SUPER_ADMIN may back the service account. FINANCE_ADMIN
+    // is deliberately excluded per the operator spec — a finance-only
+    // role must not be able to authenticate as a general admin.
+    const ADMIN_ROLES: readonly Role[] = ['ADMIN', 'SUPER_ADMIN'];
+    const effective = user.roles
+      .map((r) => r.role as Role)
+      .find((r) => (ADMIN_ROLES as readonly string[]).includes(r));
+    if (!effective) throw forbidden('service user is not an admin');
+
+    // Mint via the existing signAccessToken helper. TTL follows the same
+    // policy every other access token uses; nothing about requireAuth or
+    // requireRole is bypassed downstream.
+    const accessToken = signAccessToken(user.id, effective);
+    return { accessToken, tokenType: 'Bearer', role: effective, expiresIn: ACCESS_TTL_SECONDS };
   });
 
   app.get('/v1/auth/me', async (req, reply) => {

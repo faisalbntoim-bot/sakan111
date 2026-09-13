@@ -13,7 +13,7 @@ import { getPrisma } from '../db.js';
 import { unauthorized } from '../errors.js';
 import type { Role } from './rbac.js';
 
-const ACCESS_TTL_SECONDS = 60 * 15;              // 15 min
+export const ACCESS_TTL_SECONDS = 60 * 15;              // 15 min
 const REFRESH_TTL_SECONDS = 60 * 60 * 24 * 30;   // 30 days
 
 export interface AccessClaims {
