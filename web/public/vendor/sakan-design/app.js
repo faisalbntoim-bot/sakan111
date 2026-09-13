@@ -970,6 +970,14 @@
     onboardGo(i){ _startOnboard(); setState({onboardIdx:i}); },
     openAbout(){ setState({aboutOpen:true, authOpen:false}); },
     closeAbout(){ setState({aboutOpen:false}); },
+    /* "مميزات التطبيق" role-gate — routes to the existing flows without inventing a new page. */
+    roleGateSeeker(){ setState({aboutOpen:false, authOpen:false}); showToast('🔎 تصفّح العقارات — لا يحتاج تسجيل'); },
+    roleGateOwner(){
+      try{
+        const loc = (window.location.pathname.split('/').filter(Boolean)[0] === 'en') ? 'en' : 'ar';
+        window.location.href = '/' + loc + '/owner/login';
+      }catch{ setState({aboutOpen:false, authOpen:true, authView:'signup', signupRole:'owner'}); }
+    },
     goHome(){ setState({ dealsOpen:false, marketOpen:false, asstOpen:false, authOpen:false, detailOpen:false, mapOpen:false, dashOpen:false, officesOpen:false, notifOpen:false, savedOpen:false, aboutOpen:false, searchOpen:false, reqsPageOpen:false, galleryOpen:false, tourOpen:false, ejarOpen:false, editOpen:false, brokersOpen:false, adminOpen:false }); },
     openBrokers(){ setState({brokersOpen:true}); },
     closeBrokers(){ setState({brokersOpen:false}); },
@@ -1399,7 +1407,7 @@
     const p=properties[state.detailIdx]||properties[0]; const v=computeVerdict(p); const d=distTo(p);
     const nights=(state.calSelStart!==null&&state.calSelEnd!==null)?(state.calSelEnd-state.calSelStart):0;
     const staySubtotal=nights*p.dailyRate;
-    const dService=Math.round(staySubtotal*0.12), dVat=Math.round(dService*0.15), dTotal=staySubtotal+p.cleaning+dService+dVat;
+    const dService=Math.round(staySubtotal*0.12), dVat=Math.round((staySubtotal+dService)*0.15), dTotal=staySubtotal+dService+dVat;
     const aBase=p.price, aService=Math.round(aBase*0.025), aVat=Math.round(aService*0.15), aTotal=aBase+aService+aVat;
     /* Reviews are COLLAPSED by default — a single one-line summary strip
        that the user taps to expand. Massively cuts vertical footprint
@@ -1463,9 +1471,9 @@
       if(state.feeMode==='annual'){ const base=p.price,service=Math.round(base*0.025),vat=Math.round(service*0.15),total=base+service+vat;
         [['الإيجار السنوي',base],['رسوم خدمة سكن هوب (2.5%)',service],['ضريبة القيمة المضافة 15% (على رسوم الخدمة)',vat]].forEach(r=>feeRows+=`<div class="fee-row"><span>${r[0]}</span><span>${nfA(r[1])} ر.س</span></div>`);
         feeRows+=`<div class="fee-row total"><span>الإجمالي المطلوب</span><span>${nfA(total)} ر.س</span></div>`;
-      } else { const n=Math.max(nights,1),nightly=p.dailyRate*n,cleaning=p.cleaning,service=Math.round(nightly*0.12),vat=Math.round(service*0.15),total=nightly+cleaning+service+vat;
+      } else { const n=Math.max(nights,1),nightly=p.dailyRate*n,service=Math.round(nightly*0.12),vat=Math.round((nightly+service)*0.15),total=nightly+service+vat;
         feeRows+=`<div class="fee-row"><span>${n} ليالٍ × ${nfA(p.dailyRate)} ر.س</span><span>${nfA(nightly)} ر.س</span></div>`;
-        [['رسوم التنظيف',cleaning],['رسوم خدمة سكن هوب (12%)',service],['ضريبة القيمة المضافة 15%',vat]].forEach(r=>feeRows+=`<div class="fee-row"><span>${r[0]}</span><span>${nfA(r[1])} ر.س</span></div>`);
+        [['رسوم خدمة سكن هوب (12%)',service],['ضريبة القيمة المضافة 15%',vat]].forEach(r=>feeRows+=`<div class="fee-row"><span>${r[0]}</span><span>${nfA(r[1])} ر.س</span></div>`);
         feeRows+=`<div class="fee-row total"><span>الإجمالي المطلوب</span><span>${nfA(total)} ر.س</span></div>`;
       }
     }
@@ -1696,7 +1704,6 @@
 
               ${(priced && state.priceBreakdownOpen)?`<div class="price-breakdown">
                 <div class="pb-row"><span>${nfA(nights)} ليالٍ × ${nfA(p.dailyRate)} ر.س</span><span>${nfA(staySubtotal)} ر.س</span></div>
-                <div class="pb-row"><span>رسوم التنظيف</span><span>${nfA(p.cleaning)} ر.س</span></div>
                 <div class="pb-row"><span>رسوم خدمة سكن هوب (12%)</span><span>${nfA(dService)} ر.س</span></div>
                 <div class="pb-row"><span>ضريبة القيمة المضافة 15%</span><span>${nfA(dVat)} ر.س</span></div>
                 <div class="pb-row total"><span>الإجمالي المطلوب</span><span>${nfA(dTotal)} ر.س</span></div>
@@ -1747,7 +1754,7 @@
     const nights=(state.calSelStart!==null&&state.calSelEnd!==null)?(state.calSelEnd-state.calSelStart):0;
     let stickyPrice, stickyLabel;
     if(annual){ stickyPrice=`${nfA(p.price)} <small>ر.س / سنويًا</small>`; stickyLabel='تواصل مع المعلن'; }
-    else { const total=nights*p.dailyRate+p.cleaning; stickyPrice = nights>0? `${nfA(total)} <small>ر.س · ${nights} ليالٍ</small>` : `${nfA(p.dailyRate)} <small>ر.س / ليلة</small>`; stickyLabel='احجز الآن'; }
+    else { const total=nights*p.dailyRate; stickyPrice = nights>0? `${nfA(total)} <small>ر.س · ${nights} ليالٍ</small>` : `${nfA(p.dailyRate)} <small>ر.س / ليلة</small>`; stickyLabel='احجز الآن'; }
     return `<div class="sticky-bar float"><div class="p">${stickyPrice}</div><button data-act="stickyAction">${stickyLabel}</button></div>`;
   }
 
@@ -1760,9 +1767,9 @@
     if(state.feeMode==='annual'){ const base=p.price,service=Math.round(base*0.025),vat=Math.round(service*0.15),total=base+service+vat;
       [['الإيجار السنوي',base],['رسوم خدمة سكن هوب (2.5%)',service],['ضريبة القيمة المضافة 15% (على رسوم الخدمة)',vat]].forEach(r=>feeRows+=`<div class="fee-row"><span>${r[0]}</span><span>${nfA(r[1])} ر.س</span></div>`);
       feeRows+=`<div class="fee-row total"><span>الإجمالي المطلوب</span><span>${nfA(total)} ر.س</span></div>`;
-    } else { const n=Math.max(nights,1),nightly=p.dailyRate*n,cleaning=p.cleaning,service=Math.round(nightly*0.12),vat=Math.round(service*0.15),total=nightly+cleaning+service+vat;
+    } else { const n=Math.max(nights,1),nightly=p.dailyRate*n,service=Math.round(nightly*0.12),vat=Math.round((nightly+service)*0.15),total=nightly+service+vat;
       feeRows+=`<div class="fee-row"><span>${n} ليالٍ × ${nfA(p.dailyRate)} ر.س</span><span>${nfA(nightly)} ر.س</span></div>`;
-      [['رسوم التنظيف',cleaning],['رسوم خدمة سكن هوب (12%)',service],['ضريبة القيمة المضافة 15%',vat]].forEach(r=>feeRows+=`<div class="fee-row"><span>${r[0]}</span><span>${nfA(r[1])} ر.س</span></div>`);
+      [['رسوم خدمة سكن هوب (12%)',service],['ضريبة القيمة المضافة 15%',vat]].forEach(r=>feeRows+=`<div class="fee-row"><span>${r[0]}</span><span>${nfA(r[1])} ر.س</span></div>`);
       feeRows+=`<div class="fee-row total"><span>الإجمالي المطلوب</span><span>${nfA(total)} ر.س</span></div>`;
     }
     return `
@@ -1934,8 +1941,8 @@
 
     const nights = (state.calSelStart!=null && state.calSelEnd!=null) ? (state.calSelEnd-state.calSelStart) : 0;
     const staySubtotal = nights * p.dailyRate;
-    const dService = Math.round(staySubtotal*0.12), dVat = Math.round(dService*0.15);
-    const dTotal = staySubtotal + p.cleaning + dService + dVat;
+    const dService = Math.round(staySubtotal*0.12), dVat = Math.round((staySubtotal+dService)*0.15);
+    const dTotal = staySubtotal + dService + dVat;
 
     const gA=state.guestsAdults||1, gC=state.guestsChildren||0, gI=state.guestsInfants||0, gP=state.guestsPets||0;
     const guestsSummary = (function(){
@@ -2055,7 +2062,6 @@
     const payBody = `<div class="bsv3-body ${expPay?'open':''}">
       ${nights>0?`<div class="bsv2-breakdown">
         <div class="pb-row"><span>${nfA(nights)} × ${nfA(p.dailyRate)} ر.س</span><span>${nfA(staySubtotal)} ر.س</span></div>
-        <div class="pb-row"><span>رسوم التنظيف</span><span>${nfA(p.cleaning)} ر.س</span></div>
         <div class="pb-row"><span>رسوم خدمة سكن هوب (12%)</span><span>${nfA(dService)} ر.س</span></div>
         <div class="pb-row"><span>ضريبة القيمة المضافة 15%</span><span>${nfA(dVat)} ر.س</span></div>
         <div class="pb-row total"><span>الإجمالي</span><span>${nfA(dTotal)} ر.س</span></div>
@@ -3358,6 +3364,29 @@
         <p>منصة عقارية عربية بأسلوب تيك توك وإير بي إن بي — تجمع التصفّح الممتع والذكاء الاصطناعي والدفع المضمون في مكان واحد.</p>
       </div>
       <div class="about-body">
+        <div class="off-section-title">مميزات التطبيق</div>
+        <div class="feat-role-gate" role="group" aria-label="اختر دورك للانتقال المناسب">
+          <button class="frg-card" data-act="roleGateSeeker" type="button">
+            <span class="frg-ic" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            </span>
+            <span class="frg-body">
+              <b>باحث عن عقار</b>
+              <small>ابحث · احجز · تابع الأسعار</small>
+            </span>
+            <span class="frg-chev" aria-hidden="true">›</span>
+          </button>
+          <button class="frg-card" data-act="roleGateOwner" type="button">
+            <span class="frg-ic" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11 12 4l9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/></svg>
+            </span>
+            <span class="frg-body">
+              <b>مالك أو مكتب عقاري</b>
+              <small>أضِف عقارك · لوحة تحكم كاملة</small>
+            </span>
+            <span class="frg-chev" aria-hidden="true">›</span>
+          </button>
+        </div>
         <div class="about-vision">
           <div class="av-t">رؤيتنا</div>
           <div class="av-s">نجعل البحث عن السكن في السعودية أسهل وأمتع وأكثر أمانًا — من العرض الحيّ إلى العقد الموثّق.</div>

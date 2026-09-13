@@ -78,22 +78,30 @@ export type PriceBreakdown = {
   nights: number;
   nightlyPrice: number;
   subtotal: number;
+  /** @deprecated Cleaning fee was removed from the daily booking UI.
+   *  Kept as 0 for callers that still destructure it during their migration. */
   cleaning: number;
   serviceFee: number;
   vat: number;
   total: number;
 };
 
-export function computePrice(nightlyPrice: number, nights: number, cleaning: number): PriceBreakdown {
+/**
+ * Compute the daily-booking price breakdown.
+ *
+ * The `cleaning` parameter is accepted for backward compatibility with
+ * legacy call sites but is intentionally ignored — the booking UI no
+ * longer surfaces a separate cleaning fee. Owners now roll cleaning
+ * into the nightly rate. The stay total is:
+ *     subtotal (nights × rate) + serviceFee (12%) + VAT (15%)
+ */
+export function computePrice(nightlyPrice: number, nights: number, _cleaning: number = 0): PriceBreakdown {
   const subtotal = nightlyPrice * nights;
-  // Service fee applies to the stay subtotal only. This matches the SPA
-  // breakdown (bookSheetV2Html / bsv3 payBody) so both surfaces show
-  // identical totals for the same inputs — no double-counting cleaning.
   const serviceFee = Math.round(subtotal * SERVICE_FEE_RATE);
-  const preVat = subtotal + cleaning + serviceFee;
+  const preVat = subtotal + serviceFee;
   const vat = Math.round(preVat * VAT_RATE);
   const total = preVat + vat;
-  return { nights, nightlyPrice, subtotal, cleaning, serviceFee, vat, total };
+  return { nights, nightlyPrice, subtotal, cleaning: 0, serviceFee, vat, total };
 }
 
 const AR_NUM = ['٠','١','٢','٣','٤','٥','٦','٧','٨','٩'] as const;

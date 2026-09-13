@@ -5,18 +5,17 @@
    bar — the booking screen is a natural continuation of the property
    details page the user came from.
 
-   OUTER SHELL CONTINUITY:
-   The SPA (public/vendor/sakan-design/styles.css) sets the app-wide
-   ground to `--ink:#0F1E18` and centres its content in a 480px column
-   with a deep drop-shadow. When the user leaves /ar → /booking, we
-   MUST keep the same dark backdrop or the transition reads as leaving
-   the app. This block therefore overrides globals.css's cream `body`
-   for the entire booking segment (the segment stylesheet loads only
-   here, so /ar and the marketing site are untouched).
+   OUTER SHELL — WHITE PAPER (v2):
+   The booking flow now runs on the site's warm-white paper ground
+   instead of the earlier dark backdrop. This matches the request to
+   keep the entire booking page (and everything the user sees after
+   clicking "احجز الآن") on a light surface — no dark shell around
+   the content. The scope is still strictly this segment; /ar and the
+   rest of the site keep their own bodies.
    ========================================================================== */
 
 html, body {
-  background: #0F1E18 !important;
+  background: #F3F6F3 !important;
   min-height: 100dvh;
   margin: 0;
   overflow-x: hidden;
@@ -229,11 +228,19 @@ html, body {
 .rcal-day.pad{ cursor:default; }
 .rcal-day:not(.pad):not(.disabled):hover{ background:rgba(46,158,119,.10); transform:scale(1.04); }
 .rcal-day:not(.pad):not(.disabled):active{ transform:scale(.94); }
-.rcal-day.disabled{ color:#DEE8E1; text-decoration:line-through; cursor:not-allowed; }
+.rcal-day.disabled{ color:#B5C4BC; cursor:not-allowed; }
+.rcal-day.past{ color:#C6D2CB; text-decoration:line-through; }
+.rcal-day.booked{
+  /* Booked days are visually distinct from past days so the user
+     understands "someone else took this" vs. "this is in the past". */
+  color:#A34635;
+  background:repeating-linear-gradient(45deg, rgba(163,70,53,.06) 0 6px, transparent 6px 12px);
+  text-decoration:line-through;
+}
 .rcal-day.range{
-  background:rgba(46,158,119,.12);
+  background:rgba(46,158,119,.14);
   color:#0C4C3A; font-weight:800;
-  border-radius:0;
+  border-radius:4px;
 }
 .rcal-day.sel{
   background:linear-gradient(180deg,#2E9E77 0%,#0C4C3A 100%);
@@ -241,6 +248,107 @@ html, body {
   box-shadow:0 2px 8px rgba(46,158,119,.28);
   transform:scale(1.04);
   border-radius:10px;
+}
+.rcal-day.sel.sel-start{ border-start-end-radius:14px; border-end-end-radius:14px; }
+.rcal-day.sel.sel-end{ border-start-start-radius:14px; border-end-start-radius:14px; }
+.rcal-legend{
+  display:flex; flex-wrap:wrap; gap:10px;
+  margin:12px 2px 0; padding:0; list-style:none;
+  font-size:11px; color:#6C7B73;
+}
+.rcal-legend li{ display:inline-flex; align-items:center; gap:5px; }
+.rl-dot{ display:inline-block; width:10px; height:10px; border-radius:3px; }
+.rl-avail{ background:#FFFFFF; border:1px solid #DEE8E1; }
+.rl-sel{ background:linear-gradient(180deg,#2E9E77 0%,#0C4C3A 100%); }
+.rl-range{ background:rgba(46,158,119,.24); }
+.rl-booked{ background:repeating-linear-gradient(45deg, rgba(163,70,53,.35) 0 4px, #FFF 4px 8px); border:1px solid rgba(163,70,53,.3); }
+
+/* ==========================================================================
+   Card payment form — VISUAL ONLY (see components/booking/CardPayForm.tsx)
+   Renders a live-preview card that flips to show the CVV strip. All
+   inputs stay in local component state; nothing is posted anywhere.
+   ========================================================================== */
+.cpf{ display:grid; gap:14px; margin-top:14px; padding-top:14px; border-top:1px dashed #DEE8E1; }
+.cpf-card{
+  position:relative;
+  width:100%; max-width:340px; aspect-ratio:1.586 / 1;
+  margin:0 auto;
+  border-radius:16px;
+  transform-style:preserve-3d;
+  transition:transform .5s cubic-bezier(.5,.1,.3,1.1);
+  color:#fff;
+  box-shadow:0 12px 28px rgba(15,40,30,.18), 0 4px 8px rgba(15,40,30,.08);
+}
+.cpf-card.flipped{ transform:rotateY(180deg); }
+.cpf-face{
+  position:absolute; inset:0; border-radius:16px;
+  padding:18px 20px;
+  display:flex; flex-direction:column; justify-content:space-between;
+  backface-visibility:hidden; -webkit-backface-visibility:hidden;
+  background:linear-gradient(135deg,#0C4C3A 0%,#0A6B54 45%,#2E9E77 100%);
+  overflow:hidden;
+}
+.cpf-face::before{
+  /* soft radial highlight so the card doesn't read as flat plastic */
+  content:''; position:absolute; inset:0; pointer-events:none;
+  background:radial-gradient(120% 60% at 100% 0%, rgba(255,255,255,.18) 0%, transparent 55%);
+}
+.cpf-back{ transform:rotateY(180deg); }
+.cpf-brandline{
+  display:flex; align-items:center; justify-content:space-between;
+  position:relative; z-index:1;
+}
+.cpf-chip svg{ display:block; }
+.cpf-brand-badge{
+  padding:5px 10px; border-radius:6px;
+  background:rgba(255,255,255,.14); backdrop-filter:blur(6px);
+  font-family:'Inter','Tajawal',system-ui,sans-serif;
+  font-weight:800; font-size:12px; letter-spacing:.06em;
+}
+.cpf-card.visa .cpf-brand-badge{ background:#1A1F71; }
+.cpf-card.mastercard .cpf-brand-badge{ background:#FFB600; color:#1A1A1A; }
+.cpf-card.mada .cpf-brand-badge{ background:#fff; color:#0C4C3A; }
+.cpf-num{
+  position:relative; z-index:1;
+  font-family:'Menlo','Consolas','Roboto Mono',monospace;
+  font-size:20px; letter-spacing:2px;
+  text-align:start; direction:ltr;
+  padding:14px 0 10px;
+  transition:text-shadow .2s;
+}
+.cpf-num[data-focus="1"]{ text-shadow:0 0 12px rgba(255,255,255,.4); }
+.cpf-meta{ position:relative; z-index:1; display:flex; justify-content:space-between; gap:14px; }
+.cpf-meta-b{ display:flex; flex-direction:column; gap:2px; font-size:10px; text-transform:uppercase; letter-spacing:.08em; color:rgba(255,255,255,.7); }
+.cpf-meta-b b{ font-size:12.5px; color:#fff; text-transform:none; letter-spacing:.04em; font-weight:800; max-width:180px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.cpf-meta-b.end{ text-align:end; }
+.cpf-magstripe{ position:absolute; inset-block-start:22px; inset-inline:0; height:38px; background:#0A2B22; z-index:2; }
+.cpf-cvv-strip{
+  position:absolute; inset-block-start:76px; inset-inline:20px;
+  display:flex; align-items:center; justify-content:space-between; gap:14px;
+  padding:10px 14px; border-radius:8px;
+  background:#F3F6F3; color:#0F1E18;
+  font-family:'Menlo','Consolas',monospace; font-size:15px; letter-spacing:2px;
+  z-index:2;
+}
+.cpf-cvv-strip span{ font-family:'Tajawal',sans-serif; font-size:10px; letter-spacing:.08em; color:#6C7B73; }
+.cpf-fields{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.cpf-field{ display:flex; flex-direction:column; gap:4px; }
+.cpf-field-wide{ grid-column:1 / -1; }
+.cpf-field > span{ font-size:11.5px; color:#6C7B73; font-weight:700; }
+.cpf-field input{
+  padding:11px 12px; border-radius:12px;
+  border:1px solid #DEE8E1; background:#fff;
+  font-family:inherit; font-size:14px; color:#0F1E18;
+  min-height:44px;
+  transition:border-color .18s ease, box-shadow .18s ease;
+}
+.cpf-field input:focus{
+  outline:none; border-color:#2E9E77;
+  box-shadow:0 0 0 3px rgba(46,158,119,.18);
+}
+.cpf-note{ font-size:11.5px; color:#6C7B73; text-align:center; margin:2px 0 0; }
+@media (prefers-reduced-motion: reduce){
+  .cpf-card{ transition:none; }
 }
 
 /* ---- GuestsPicker ------------------------------------------------------- */

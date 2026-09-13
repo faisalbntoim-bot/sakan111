@@ -91,15 +91,26 @@ export function RtlCalendar({ bookedDays, checkIn, checkOut, onChange }: Props) 
     // we mirror that behaviour rather than inventing multi-month data.
     const isBooked = isCurrentMonthView && bookedDays.includes(d);
     const isDisabled = isPast || isBooked;
-    const isSel = cellYmd === checkIn || cellYmd === checkOut;
+    const isSelStart = cellYmd === checkIn;
+    const isSelEnd = cellYmd === checkOut;
+    const isSel = isSelStart || isSelEnd;
     const isInRange =
       !!(checkIn && checkOut && cellYmd > checkIn && cellYmd < checkOut);
     const cls = [
       'rcal-day',
       isDisabled ? 'disabled' : '',
+      isBooked ? 'booked' : '',
+      isPast && !isBooked ? 'past' : '',
       isSel ? 'sel' : '',
+      isSelStart ? 'sel-start' : '',
+      isSelEnd ? 'sel-end' : '',
       isInRange ? 'range' : '',
     ].filter(Boolean).join(' ');
+    const label = isBooked
+      ? `${d} ${AR_MONTHS[month]} — محجوز`
+      : isPast
+        ? `${d} ${AR_MONTHS[month]} — منتهي`
+        : `${d} ${AR_MONTHS[month]}`;
     cells.push(
       <button
         key={`d-${d}`}
@@ -107,7 +118,8 @@ export function RtlCalendar({ bookedDays, checkIn, checkOut, onChange }: Props) 
         className={cls}
         disabled={isDisabled}
         onClick={() => handleClick(d)}
-        aria-label={`${d} ${AR_MONTHS[month]}`}
+        aria-label={label}
+        aria-pressed={isSel || isInRange}
       >
         {nfA(d)}
       </button>
@@ -140,6 +152,12 @@ export function RtlCalendar({ bookedDays, checkIn, checkOut, onChange }: Props) 
         {AR_WEEKDAYS.map(w => <div key={w} className="rcal-wd">{w}</div>)}
       </div>
       <div className="rcal-grid">{cells}</div>
+      <ul className="rcal-legend" aria-hidden="true">
+        <li><span className="rl-dot rl-avail" /> متاح</li>
+        <li><span className="rl-dot rl-sel" /> مختار</li>
+        <li><span className="rl-dot rl-range" /> ضمن المدة</li>
+        <li><span className="rl-dot rl-booked" /> محجوز</li>
+      </ul>
     </div>
   );
 }

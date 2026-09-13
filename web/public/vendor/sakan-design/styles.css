@@ -2357,18 +2357,19 @@ svg.leaflet-image-layer.leaflet-interactive path {
   .photo-grid .ph.big{ grid-row:1 / span 2; }
   .see-all{ border:none; cursor:pointer; font-family:var(--font-ar); }
 
-  /* full-screen gallery lightbox */
-  .gallery{ position:fixed; inset:0; z-index:120; background:#0c0f14; display:flex; flex-direction:column;
+  /* full-screen gallery lightbox — light paper ground (v2) */
+  .gallery{ position:fixed; inset:0; z-index:120; background:#FFFFFF; display:flex; flex-direction:column;
     opacity:0; pointer-events:none; transition:opacity .22s ease; }
   .gallery.open{ opacity:1; pointer-events:auto; }
-  .gal-top{ display:flex; align-items:center; justify-content:space-between; padding:max(16px,env(safe-area-inset-top)) 18px 10px; color:#fff; }
-  .gal-count{ font-family:'Tajawal',var(--font-ar); font-weight:800; font-size:13px; color:rgba(255,255,255,.85); }
-  .gal-close{ width:38px; height:38px; border-radius:50%; border:none; background:rgba(255,255,255,.14); color:#fff; font-size:16px; cursor:pointer; }
+  .gal-top{ display:flex; align-items:center; justify-content:space-between; padding:max(16px,env(safe-area-inset-top)) 18px 10px; color:#0F1E18; border-bottom:1px solid #E7EFE9; }
+  .gal-count{ font-family:'Tajawal',var(--font-ar); font-weight:800; font-size:13px; color:#4A5A54; }
+  .gal-close{ width:38px; height:38px; border-radius:50%; border:1px solid #E7EFE9; background:#F3F6F3; color:#0F1E18; font-size:16px; cursor:pointer; }
+  .gal-close:hover{ background:#E7EFE9; }
   .gal-main{ flex:1; position:relative; display:flex; align-items:center; justify-content:center; overflow:hidden; }
   .gal-img{ position:absolute; inset:14px; background-size:cover; background-position:center; border-radius:14px; }
   .gal-nav{ position:relative; z-index:2; width:44px; height:44px; margin:0 6px; border-radius:50%; border:none;
     background:rgba(255,255,255,.16); color:#fff; font-size:24px; cursor:pointer; flex-shrink:0; }
-  .gal-cap{ text-align:center; color:rgba(255,255,255,.85); font-size:12.5px; font-weight:700; padding:10px 16px; }
+  .gal-cap{ text-align:center; color:#4A5A54; font-size:12.5px; font-weight:700; padding:10px 16px; }
   .gal-thumbs{ display:flex; gap:8px; overflow-x:auto; padding:6px 16px max(16px,env(safe-area-inset-bottom)); scrollbar-width:none; }
   .gal-thumbs::-webkit-scrollbar{ display:none; }
   .gal-th{ width:60px; height:46px; border-radius:9px; background-size:cover; background-position:center; flex:0 0 auto;
@@ -3324,13 +3325,13 @@ svg.leaflet-image-layer.leaflet-interactive path {
 
   /* stacked, smooth photo gallery */
   .gal-top{ gap:12px; justify-content:flex-start !important; align-items:center; }
-  .gal-ttx b{ display:block; font-family:var(--font-ar); font-weight:800; font-size:14px; color:#fff; }
-  .gal-ttx small{ font-size:10.5px; color:rgba(255,255,255,.7); }
+  .gal-ttx b{ display:block; font-family:var(--font-ar); font-weight:800; font-size:14px; color:#0F1E18; }
+  .gal-ttx small{ font-size:10.5px; color:#6C7B73; }
   .gal-scroll{ flex:1; overflow-y:auto; scroll-behavior:smooth; -webkit-overflow-scrolling:touch; padding:6px 14px max(20px,env(safe-area-inset-bottom)); scroll-snap-type:y proximity; }
   .gal-scroll::-webkit-scrollbar{ width:0; }
   .gal-slide{ margin:0 0 14px; scroll-snap-align:start; }
-  .gal-photo{ width:100%; aspect-ratio:4/3; border-radius:16px; background-size:cover; background-position:center; box-shadow:0 10px 30px rgba(0,0,0,.4); }
-  .gal-cap2{ display:flex; align-items:center; justify-content:space-between; padding:9px 4px 0; color:rgba(255,255,255,.9); }
+  .gal-photo{ width:100%; aspect-ratio:4/3; border-radius:16px; background-size:cover; background-position:center; box-shadow:0 10px 30px rgba(15,40,30,.10); }
+  .gal-cap2{ display:flex; align-items:center; justify-content:space-between; padding:9px 4px 0; color:#4A5A54; }
   .gc-lbl{ font-family:var(--font-ar); font-weight:700; font-size:12.5px; }
   .gc-num{ font-family:'Tajawal',var(--font-ar); font-weight:800; font-size:11px; color:rgba(255,255,255,.6); }
   .gal-end{ text-align:center; color:rgba(255,255,255,.4); font-size:11px; padding:8px 0 4px; }
@@ -5719,9 +5720,17 @@ img{ -webkit-user-drag:none; user-select:none; }
 }
 .mode-toggle.solo button.on.active .ma-ic{ display:inline-flex; color:#D8F5EC; }
 .mode-toggle.solo button.on.active.daily-glow{
-  /* Gold-tinted glow so daily is instantly recognisable as short-stay */
-  background:linear-gradient(180deg,#B58A2C 0%,#8A6A1A 100%);
-  box-shadow:0 4px 14px rgba(181,138,44,.32);
+  /* Deep-green identity — daily rental now shares the primary accent. */
+  background:linear-gradient(180deg,#2E9E77 0%,#0E7C66 100%);
+  box-shadow:0 4px 14px rgba(14,124,102,.28);
+  color:#fff;
+}
+.mode-toggle.solo button.on.active.daily-glow:hover{
+  background:linear-gradient(180deg,#37B287 0%,#12876F 100%);
+}
+.mode-toggle.solo button.on.active.daily-glow:active{
+  background:linear-gradient(180deg,#0E7C66 0%,#0A6B54 100%);
+  transform:translateY(1px);
 }
 .mode-toggle.solo button.mode-alt{
   display:inline-flex; align-items:center; gap:6px;
@@ -7008,9 +7017,10 @@ img{ -webkit-user-drag:none; user-select:none; }
              0 0 0 3px rgba(181,138,44,.08);
 }
 .mode-toggle.solo button.on.active.daily-glow{
-  background:linear-gradient(180deg,#C7A252 0%,#8A6A1A 100%);
-  box-shadow:0 4px 14px rgba(181,138,44,.30);
-  border:1px solid rgba(181,138,44,.42);
+  background:linear-gradient(180deg,#2E9E77 0%,#0E7C66 100%);
+  box-shadow:0 4px 14px rgba(14,124,102,.28);
+  border:1px solid rgba(14,124,102,.42);
+  color:#fff;
 }
 
 /* When daily is active, hide the annual toggle button entirely (was
@@ -7847,4 +7857,62 @@ img{ -webkit-user-drag:none; user-select:none; }
 @keyframes mp2Shimmer{
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
+}
+
+/* ==========================================================================
+   Features role-gate — two-choice cards inside the About page.
+   Prompts the visitor to self-identify (باحث / مالك) before scrolling
+   into the general "مميزات المنصة" section. Green identity, scoped so
+   it can't leak outside .about-page.
+   ========================================================================== */
+.about-page .feat-role-gate{
+  display:grid; gap:12px; margin:6px 14px 18px;
+}
+.about-page .frg-card{
+  display:flex; align-items:center; gap:12px;
+  padding:14px 16px;
+  background:linear-gradient(180deg,#F3FBF5 0%, #EAF6EE 100%);
+  border:1px solid rgba(14,124,102,.22);
+  border-radius:16px;
+  color:#0F1E18; font-family:inherit; font-size:14px;
+  cursor:pointer; text-align:start; width:100%;
+  transition:transform .18s ease, border-color .18s ease, box-shadow .18s ease, background .18s ease;
+  box-shadow:0 2px 6px rgba(14,124,102,.08);
+}
+.about-page .frg-card:hover{
+  border-color:#0E7C66;
+  transform:translateY(-1px);
+  box-shadow:0 6px 18px rgba(14,124,102,.15);
+}
+.about-page .frg-card:active{ transform:translateY(0); box-shadow:0 2px 6px rgba(14,124,102,.10); }
+.about-page .frg-ic{
+  display:inline-flex; align-items:center; justify-content:center;
+  width:44px; height:44px; border-radius:12px;
+  background:#0E7C66; color:#fff; flex:0 0 44px;
+}
+.about-page .frg-body{ display:flex; flex-direction:column; gap:2px; flex:1; }
+.about-page .frg-body b{ font-weight:800; font-size:15px; color:#0F1E18; }
+.about-page .frg-body small{ font-size:12px; color:#4A5A54; }
+.about-page .frg-chev{ font-size:22px; color:#0E7C66; font-weight:700; }
+
+/* ==========================================================================
+   Market Pulse mp2 — light polish (v2b): pulse the live dot and give
+   stat cards a subtle press feedback. All animations are opt-in via
+   reduced-motion.
+   ========================================================================== */
+.market-sheet.mp2 .mp2-live-dot{
+  display:inline-block; width:7px; height:7px; border-radius:50%;
+  background:#0E7C66; margin-inline-end:4px;
+  box-shadow:0 0 0 0 rgba(46,158,119,.55);
+  animation: mp2Pulse 1.6s ease-out infinite;
+}
+@keyframes mp2Pulse{
+  0%   { box-shadow:0 0 0 0 rgba(46,158,119,.55); }
+  70%  { box-shadow:0 0 0 8px rgba(46,158,119,0);  }
+  100% { box-shadow:0 0 0 0 rgba(46,158,119,0);    }
+}
+.market-sheet.mp2 .mp2-stat{ transition:transform .18s ease, box-shadow .18s ease; }
+.market-sheet.mp2 .mp2-stat:active{ transform:scale(0.985); }
+@media (prefers-reduced-motion: reduce){
+  .market-sheet.mp2 .mp2-live-dot{ animation:none; }
 }

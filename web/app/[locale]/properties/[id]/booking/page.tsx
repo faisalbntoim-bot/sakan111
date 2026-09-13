@@ -37,6 +37,7 @@ import { BookingChrome } from '@/components/booking/BookingChrome';
 import { PropertyMiniCard } from '@/components/booking/PropertyMiniCard';
 import { RtlCalendar } from '@/components/booking/RtlCalendar';
 import { GuestsPicker } from '@/components/booking/GuestsPicker';
+import { CardPayForm } from '@/components/booking/CardPayForm';
 import { SimilarPropertiesSection } from '@/components/SimilarPropertiesSection';
 
 // Annual rent price model — daily rate × ~30 nights of the year is a poor
@@ -285,12 +286,6 @@ export default function BookingPage({ params }: { params: { locale: string; id: 
                 <span>{nfA(property.dailyRate)} ر.س × {nfA(nights)} ليالٍ</span>
                 <span>{nfA(dailyPrice.subtotal)} ر.س</span>
               </div>
-              {property.cleaning > 0 && (
-                <div className="pr-row">
-                  <span>رسوم التنظيف</span>
-                  <span>{nfA(dailyPrice.cleaning)} ر.س</span>
-                </div>
-              )}
               <div className="pr-row">
                 <span>رسوم خدمة سكن هوب</span>
                 <span>{nfA(dailyPrice.serviceFee)} ر.س</span>
@@ -399,7 +394,10 @@ export default function BookingPage({ params }: { params: { locale: string; id: 
 
             {/* Inline payment method picker — no separate /pay page.
                 Real Moyasar / Apple Pay integration is honestly stubbed
-                until the merchant identifier + hosted checkout are wired. */}
+                until the merchant identifier + hosted checkout are wired.
+                The card form below is VISUAL ONLY (never posted anywhere)
+                so the flow reads as a real payment app until the merchant
+                account lands. */}
             <div className="brs-methods-title">طريقة الدفع</div>
             <div className="pay-methods-v3" role="radiogroup" aria-label="طريقة الدفع">
               {([
@@ -434,6 +432,8 @@ export default function BookingPage({ params }: { params: { locale: string; id: 
                 </button>
               ))}
             </div>
+
+            {payMethod === 'card' && <CardPayForm />}
           </div>
           <button
             className="brs-cta"

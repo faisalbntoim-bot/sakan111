@@ -19,6 +19,19 @@ import { useState } from 'react';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || '';
 
+/**
+ * Preview shortcut for admin access.
+ *
+ * The credential comparison lives in the server-only route handler at
+ * `/api/dev-admin-login` — this file (which ships to the browser) knows
+ * nothing about the placeholder pair. When the handler returns 404 the
+ * shortcut is off; when it returns 200 the client redirects.
+ *
+ * In production the server handler returns 404 unconditionally, so no
+ * placeholder pair can ever unlock the admin surface even if a client-
+ * side attacker tampers with this page.
+ */
+
 export default function AdminLoginPage({ params }: { params: { locale: string } }) {
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
@@ -28,6 +41,23 @@ export default function AdminLoginPage({ params }: { params: { locale: string } 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErr('');
+    // Try the preview shortcut first. The endpoint is a same-origin
+    // Next.js route handler that returns 200 only in development / preview
+    // AND only when the server env has the placeholder creds configured.
+    // In production the endpoint 404s — we simply fall through to the
+    // real OTP flow below without ever knowing what a "valid" pair is.
+    try {
+      const shortcut = await fetch('/api/dev-admin-login', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ user: phone.trim(), pass: password }),
+      });
+      if (shortcut.ok) {
+        window.location.href = `/${params.locale}/admin`;
+        return;
+      }
+    } catch { /* network / offline — fall through to the real path */ }
+
     if (!API_BASE) {
       setErr('واجهة الدخول الإداري تعمل، لكن NEXT_PUBLIC_API_BASE_URL غير معرَّف — لن نتصل بخادم وهمي.');
       return;

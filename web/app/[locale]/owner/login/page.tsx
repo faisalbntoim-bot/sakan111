@@ -224,6 +224,15 @@ function OwnerLoginInner({ params }: { params: { locale: string } }) {
             <Link href={`/${params.locale}`}>العودة للصفحة الرئيسية</Link>
           </p>
         </section>
+        <Link href={`/${params.locale}/admin/login`} className="ol-admin-chip" aria-label="لوحة التحكم">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <rect x="3" y="3" width="7" height="9" rx="1.5" />
+            <rect x="14" y="3" width="7" height="5" rx="1.5" />
+            <rect x="14" y="12" width="7" height="9" rx="1.5" />
+            <rect x="3" y="16" width="7" height="5" rx="1.5" />
+          </svg>
+          <span>لوحة التحكم</span>
+        </Link>
       </main>
     </>
   );
@@ -251,6 +260,18 @@ function OwnerLoginStyles() {
       .ol-row .ol-btn { flex: 1; }
       .ol-foot { margin-block-start: 18px; text-align: center; font-size: 13px; }
       .ol-foot a { color: var(--accent); text-decoration: underline; }
+      .ol-admin-chip {
+        display: inline-flex; gap: 6px; align-items: center;
+        margin: 20px auto 0; padding: 6px 12px;
+        border: 1px solid var(--line); border-radius: 999px;
+        background: var(--ground-2); color: var(--ink-2);
+        font-size: 12px; text-decoration: none;
+        transition: border-color .15s ease, color .15s ease;
+      }
+      .ol-admin-chip:hover, .ol-admin-chip:focus-visible {
+        border-color: var(--accent); color: var(--accent); outline: none;
+      }
+      .ol-page { display: flex; flex-direction: column; align-items: center; }
     `}</style>
   );
 }
