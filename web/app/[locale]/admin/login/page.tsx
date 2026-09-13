@@ -20,16 +20,14 @@ import { useState } from 'react';
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || '';
 
 /**
- * Preview shortcut for admin access.
+ * Admin sign-in page.
  *
- * The credential comparison lives in the server-only route handler at
- * `/api/dev-admin-login` — this file (which ships to the browser) knows
- * nothing about the placeholder pair. When the handler returns 404 the
- * shortcut is off; when it returns 200 the client redirects.
- *
- * In production the server handler returns 404 unconditionally, so no
- * placeholder pair can ever unlock the admin surface even if a client-
- * side attacker tampers with this page.
+ * Credentials are compared server-side by the route handler at
+ * `/api/admin/login`, which reads SAKAN_ADMIN_USER / SAKAN_ADMIN_PASS
+ * from the environment (never NEXT_PUBLIC). On success the server sets
+ * an HttpOnly session cookie and this file navigates to /:locale/admin.
+ * Failed attempts get a single generic error — no field-level hint —
+ * and this file never sees the reference credentials.
  */
 
 export default function AdminLoginPage({ params }: { params: { locale: string } }) {
@@ -41,32 +39,45 @@ export default function AdminLoginPage({ params }: { params: { locale: string } 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErr('');
-    // Try the preview shortcut first. The endpoint is a same-origin
-    // Next.js route handler that returns 200 only in development / preview
-    // AND only when the server env has the placeholder creds configured.
-    // In production the endpoint 404s — we simply fall through to the
-    // real OTP flow below without ever knowing what a "valid" pair is.
+    setBusy(true);
+    // Primary path: same-origin server route reads SAKAN_ADMIN_USER /
+    // SAKAN_ADMIN_PASS from the environment, validates in constant time,
+    // and — on success — sets an HttpOnly session cookie. Nothing on the
+    // client sees the reference credentials.
     try {
-      const shortcut = await fetch('/api/dev-admin-login', {
+      const res = await fetch('/api/admin/login', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ user: phone.trim(), pass: password }),
       });
-      if (shortcut.ok) {
+      if (res.ok) {
         window.location.href = `/${params.locale}/admin`;
         return;
       }
-    } catch { /* network / offline — fall through to the real path */ }
+      if (res.status === 401) {
+        // Deliberately generic — never disclose which field was wrong.
+        setErr('اسم المستخدم أو كلمة المرور غير صحيحة.');
+        setBusy(false);
+        return;
+      }
+      if (res.status === 404) {
+        setErr('واجهة الدخول الإداري غير مفعّلة على هذه البيئة.');
+        setBusy(false);
+        return;
+      }
+      // Any other status → fall through to the legacy OTP path below.
+    } catch { /* network / offline — fall through */ }
 
     if (!API_BASE) {
       setErr('واجهة الدخول الإداري تعمل، لكن NEXT_PUBLIC_API_BASE_URL غير معرَّف — لن نتصل بخادم وهمي.');
+      setBusy(false);
       return;
     }
     if (phone.trim().length < 6 || password.length < 6) {
       setErr('يرجى إدخال الجوال وكلمة المرور بشكل صحيح.');
+      setBusy(false);
       return;
     }
-    setBusy(true);
     try {
       // The backend expects OTP + phone rather than password for public
       // users; admins should be issued a service-account bearer token
