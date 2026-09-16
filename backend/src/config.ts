@@ -74,8 +74,20 @@ const schema = z.object({
   SAKAN_INTERNAL_ADMIN_USER_ID: z.string().optional(),
 
   // ---- Object storage (property images, KYC docs, invoices, tour glbs) ----
-  /** `sandbox` (default; in-memory dev sink) or `s3` (real signed URLs). */
-  STORAGE_PROVIDER: z.enum(['sandbox', 's3']).default('sandbox'),
+  /** `sandbox` (dev / tests), `local` (production on-disk, same server),
+   *  or `s3` (production signed URLs to a cloud bucket). */
+  STORAGE_PROVIDER: z.enum(['sandbox', 'local', 's3']).default('sandbox'),
+  /** Absolute directory where LocalStorageProvider writes files. Required
+   *  when STORAGE_PROVIDER=local. Never appears in a client response. */
+  LOCAL_STORAGE_DIR: z.string().optional(),
+  /** HMAC key that signs the short-lived local upload URLs. Required
+   *  when STORAGE_PROVIDER=local. At least 32 chars, server-only. */
+  MEDIA_UPLOAD_SIGNING_SECRET: z.string().min(32).optional(),
+  /** Server-side per-file byte limits (defaults are generous enough for
+   *  a typical property listing but a lot less than MAX_UPLOAD_BYTES). */
+  MEDIA_IMAGE_MAX_BYTES: z.coerce.number().int().positive().default(15 * 1024 * 1024),
+  MEDIA_VIDEO_MAX_BYTES: z.coerce.number().int().positive().default(300 * 1024 * 1024),
+  MEDIA_VIDEO_MAX_DURATION_SECONDS: z.coerce.number().int().positive().default(180),
   /** S3-family bucket name. Required when STORAGE_PROVIDER=s3. */
   S3_BUCKET: z.string().optional(),
   /** AWS region string (e.g. eu-central-1). For R2 use `auto`. */
@@ -123,7 +135,11 @@ function assertProdSafety(cfg: Config): void {
     problems.push('CORS_ALLOWED_ORIGINS=* is not allowed in production; whitelist explicit origins');
   }
   if (cfg.STORAGE_PROVIDER === 'sandbox') {
-    problems.push('STORAGE_PROVIDER=sandbox is not allowed in production; set STORAGE_PROVIDER=s3 and configure S3_*');
+    problems.push('STORAGE_PROVIDER=sandbox is not allowed in production; set STORAGE_PROVIDER=local or STORAGE_PROVIDER=s3');
+  }
+  if (cfg.STORAGE_PROVIDER === 'local') {
+    if (!cfg.LOCAL_STORAGE_DIR)         problems.push('LOCAL_STORAGE_DIR is required when STORAGE_PROVIDER=local');
+    if (!cfg.MEDIA_UPLOAD_SIGNING_SECRET) problems.push('MEDIA_UPLOAD_SIGNING_SECRET (>=32 chars) is required when STORAGE_PROVIDER=local');
   }
   if (cfg.STORAGE_PROVIDER === 's3') {
     if (!cfg.S3_BUCKET)            problems.push('S3_BUCKET is required when STORAGE_PROVIDER=s3');

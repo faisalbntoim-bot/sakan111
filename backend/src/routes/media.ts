@@ -58,6 +58,22 @@ export default async function mediaRoutes(app: FastifyInstance) {
     if (!ALLOWED_CONTENT_TYPES[body.kind].includes(body.contentType)) {
       throw badRequest(`contentType ${body.contentType} not allowed for kind=${body.kind}`);
     }
+    // Per-kind size limits from config (tighter than MAX_UPLOAD_BYTES).
+    if (body.kind === 'image' && body.sizeBytes > config.MEDIA_IMAGE_MAX_BYTES) {
+      throw badRequest('image exceeds MEDIA_IMAGE_MAX_BYTES');
+    }
+    if (body.kind === 'video' && body.sizeBytes > config.MEDIA_VIDEO_MAX_BYTES) {
+      throw badRequest('video exceeds MEDIA_VIDEO_MAX_BYTES');
+    }
+    // Property ownership enforcement — when a propertyId is supplied,
+    // it MUST belong to the caller (or the caller is an admin).
+    if (body.propertyId) {
+      const prop = await getPrisma().property.findUnique({ where: { id: body.propertyId }, select: { ownerId: true } });
+      if (!prop) throw notFound('property not found');
+      if (prop.ownerId !== caller.userId && !isAdminRole(caller.role)) {
+        throw notFound('property not found');
+      }
+    }
     const storage = getStorage();
     const signed = await storage.signUpload({
       ownerUserId: caller.userId,
@@ -211,5 +227,115 @@ export default async function mediaRoutes(app: FastifyInstance) {
   }, async (_req, reply) => {
     // Body is consumed but discarded; sandbox does not persist anything.
     return reply.code(200).send({ ok: true });
+  });
+
+  /**
+   * PUT /v1/media/local-upload/* — production byte sink for the
+   * LocalStorageProvider.
+   *
+   * Verifies the HMAC signature the provider issued (bound to
+   * providerKey + expiry + expected size). Writes bytes to
+   * LOCAL_STORAGE_DIR — path is resolved by the provider so a bad key
+   * cannot escape the root. No auth header required on this URL:
+   * possession of a fresh signature IS the authorization, exactly as
+   * with a signed S3 PUT URL.
+   */
+  app.put('/v1/media/local-upload/*', {
+    bodyLimit: MAX_UPLOAD_BYTES,
+  }, async (req, reply) => {
+    if (config.STORAGE_PROVIDER !== 'local') {
+      return reply.code(404).send({ error: 'NOT_FOUND' });
+    }
+    // Fastify wildcard param: everything after /v1/media/local-upload/
+    const providerKey = (req.params as { '*': string })['*'] ?? '';
+    const q = req.query as { exp?: string; size?: string; sig?: string };
+    const exp = Number(q.exp);
+    const size = Number(q.size);
+    const sig = String(q.sig ?? '');
+
+    // Delegate verification to the provider — same HMAC key + shape.
+    const storage = getStorage();
+    const local = storage as unknown as {
+      config?: { dir: string; signingSecret: string };
+      writeBytes?: (key: string, buf: Buffer) => Promise<void>;
+    };
+    if (!local.config || !local.writeBytes) {
+      return reply.code(404).send({ error: 'NOT_FOUND' });
+    }
+    // Local verifier is exposed via storage/local.js — import lazily to keep
+    // sandbox/s3 boots free of fs.
+    const { verifySignedUpload, verifyKey } = await import('../storage/local.js');
+    try { verifyKey(providerKey); } catch { return reply.code(400).send({ error: 'BAD_KEY' }); }
+    if (!verifySignedUpload(local.config, providerKey, exp, size, sig)) {
+      return reply.code(401).send({ error: 'INVALID_UPLOAD_SIGNATURE' });
+    }
+
+    // Bound the read to the signed size. Refuse if the incoming body
+    // does not match — this prevents a signature reuse for a different
+    // payload / a chunked stream sneaking more bytes than declared.
+    const body = req.body;
+    if (!Buffer.isBuffer(body)) return reply.code(400).send({ error: 'EMPTY_BODY' });
+    if (body.length !== size) return reply.code(400).send({ error: 'SIZE_MISMATCH' });
+
+    await local.writeBytes(providerKey, body);
+    return reply.code(200).send({ ok: true });
+  });
+
+  /**
+   * GET /v1/media/local-stream/* — auth-guarded streaming read for
+   * the LocalStorageProvider. Enforces the same visibility rules as
+   * the signed-download endpoint and honours HTTP Range so a `<video>`
+   * element can seek without downloading the whole file first.
+   */
+  app.get('/v1/media/local-stream/*', async (req, reply) => {
+    if (config.STORAGE_PROVIDER !== 'local') {
+      return reply.code(404).send({ error: 'NOT_FOUND' });
+    }
+    const caller = requireAuth(req, reply);
+    const providerKey = (req.params as { '*': string })['*'] ?? '';
+    const prisma = getPrisma();
+    const asset = await prisma.mediaAsset.findFirst({ where: { providerKey } });
+    if (!asset) throw notFound('media not found');
+    if (asset.visibility === 'private') {
+      if (asset.ownerUserId !== caller.userId && !isAdminRole(caller.role)) {
+        throw notFound('media not found');
+      }
+    }
+
+    const storage = getStorage();
+    const local = storage as unknown as { openRead?: (key: string, o?: { start?: number; end?: number }) => Promise<{ stream: NodeJS.ReadableStream; size: number }> };
+    if (!local.openRead) return reply.code(404).send({ error: 'NOT_FOUND' });
+
+    // Parse a single-range header if present. Ignore multi-range.
+    const rangeHeader = req.headers['range'];
+    if (typeof rangeHeader === 'string' && rangeHeader.startsWith('bytes=')) {
+      const m = rangeHeader.slice(6).match(/^(\d+)-(\d*)$/);
+      if (!m) return reply.code(416).send({ error: 'INVALID_RANGE' });
+      // First get the total size so we can clamp the end and set headers.
+      // openRead without opts returns the whole file but also gives us `size`.
+      const probe = await local.openRead(providerKey);
+      // Immediately discard the probe stream — we only need `size`.
+      (probe.stream as unknown as { destroy?: (e?: Error) => void }).destroy?.();
+      const start = Number(m[1]);
+      const end = m[2] === '' ? probe.size - 1 : Math.min(probe.size - 1, Number(m[2]));
+      if (start > end || start >= probe.size) {
+        reply.header('content-range', `bytes */${probe.size}`);
+        return reply.code(416).send();
+      }
+      const { stream } = await local.openRead(providerKey, { start, end });
+      reply.code(206);
+      reply.header('accept-ranges', 'bytes');
+      reply.header('content-range', `bytes ${start}-${end}/${probe.size}`);
+      reply.header('content-length', String(end - start + 1));
+      reply.header('content-type', asset.mimeType);
+      return reply.send(stream);
+    }
+
+    // No Range → send the whole file.
+    const { stream, size } = await local.openRead(providerKey);
+    reply.header('accept-ranges', 'bytes');
+    reply.header('content-length', String(size));
+    reply.header('content-type', asset.mimeType);
+    return reply.send(stream);
   });
 }

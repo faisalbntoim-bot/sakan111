@@ -18,8 +18,10 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || '';
 const TOKEN_KEY = 'sh_owner_token';
 
-const ALLOWED_MIME = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif']);
-const MAX_BYTES = 25 * 1024 * 1024; // 25 MB — matches backend MAX_UPLOAD_BYTES
+const ALLOWED_IMAGE_MIME = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif']);
+const ALLOWED_VIDEO_MIME = new Set(['video/mp4', 'video/quicktime', 'video/webm']);
+const IMAGE_MAX_BYTES = 15 * 1024 * 1024;  // 15 MB — matches backend MEDIA_IMAGE_MAX_BYTES default
+const VIDEO_MAX_BYTES = 300 * 1024 * 1024; // 300 MB — matches backend MEDIA_VIDEO_MAX_BYTES default
 
 export class MediaUploadError extends Error {
   readonly code: string;
@@ -51,14 +53,32 @@ export async function sha256Hex(file: Blob): Promise<string> {
   return hex;
 }
 
+/** Strip `;codecs=…` etc. so the backend allowlist matches the base MIME. */
+function baseMime(t: string): string {
+  const i = t.indexOf(';');
+  return i === -1 ? t : t.slice(0, i).trim();
+}
+
+/** Classify a browser File as image / video. Returns null for unsupported. */
+export function classifyFile(file: File): 'image' | 'video' | null {
+  const t = baseMime(file.type);
+  if (ALLOWED_IMAGE_MIME.has(t)) return 'image';
+  if (ALLOWED_VIDEO_MIME.has(t)) return 'video';
+  return null;
+}
+
 /** Reject files client-side before we spend bandwidth on them. */
-export function validateFile(file: File): void {
-  if (!ALLOWED_MIME.has(file.type)) {
-    throw new MediaUploadError('BAD_MIME', 'صيغة الصورة غير مدعومة. المسموح: JPEG / PNG / WebP / HEIC.');
+export function validateFile(file: File): 'image' | 'video' {
+  const kind = classifyFile(file);
+  if (!kind) {
+    throw new MediaUploadError('BAD_MIME', 'صيغة الملف غير مدعومة.');
   }
-  if (file.size <= 0 || file.size > MAX_BYTES) {
-    throw new MediaUploadError('BAD_SIZE', 'حجم الصورة يجب أن يكون أقل من 25 ميجابايت.');
+  const max = kind === 'image' ? IMAGE_MAX_BYTES : VIDEO_MAX_BYTES;
+  if (file.size <= 0 || file.size > max) {
+    const mb = Math.round(max / (1024 * 1024));
+    throw new MediaUploadError('BAD_SIZE', `الحد الأقصى ${mb} ميجابايت.`);
   }
+  return kind;
 }
 
 export type SignedUpload = {
@@ -71,19 +91,24 @@ export type SignedUpload = {
   expiresAt: string;
 };
 
+function normaliseContentType(raw: string, kind: 'image' | 'video'): string {
+  const base = baseMime(raw);
+  // iOS sometimes reports image/heif; backend allowlist entries include
+  // both, but we normalise here anyway to be defensive against browser
+  // variants that add codec suffixes.
+  return base || (kind === 'image' ? 'image/jpeg' : 'video/webm');
+}
+
 async function requestUploadUrl(input: {
-  file: File; propertyId?: string; sha256: string;
+  file: File; kind: 'image' | 'video'; propertyId?: string; sha256: string;
 }): Promise<SignedUpload> {
   assertApi();
-  // Backend allowlist covers image/heic; frontend sends whatever the OS
-  // reported. If a Safari device reports image/heif we downgrade to heic
-  // on the wire so the backend accepts it — the bytes are identical.
-  const contentType = input.file.type === 'image/heif' ? 'image/heic' : input.file.type;
+  const contentType = normaliseContentType(input.file.type, input.kind);
   const res = await fetch(`${API_BASE}/v1/media/upload-url`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...bearer() },
     body: JSON.stringify({
-      kind: 'image',
+      kind: input.kind,
       contentType,
       sizeBytes: input.file.size,
       sha256: input.sha256,
@@ -96,15 +121,20 @@ async function requestUploadUrl(input: {
   return await res.json() as SignedUpload;
 }
 
-/** Rewrite the sandbox URL so it points at a real HTTP endpoint the browser can PUT to. */
+/** Turn provider-scheme URLs into a real HTTP endpoint the browser can PUT to.
+ *
+ *  - sandbox:// (dev)   → same-origin /v1/media/sandbox-upload/<key>
+ *  - /v1/media/local-upload/…  (local, production; already relative) → prefixed with API_BASE
+ *  - https:// (s3 / cloud) → passed through
+ */
 function normaliseUploadUrl(url: string): string {
   if (url.startsWith('sandbox://upload/')) {
-    // sandbox://upload/<providerKey>?ct=<mime>  →  ${API_BASE}/v1/media/sandbox-upload/<providerKey>
     const rest = url.slice('sandbox://upload/'.length);
     const q = rest.indexOf('?');
     const key = q === -1 ? rest : rest.slice(0, q);
     return `${API_BASE}/v1/media/sandbox-upload/${key}`;
   }
+  if (url.startsWith('/')) return `${API_BASE}${url}`; // local provider returns relative paths
   return url;
 }
 
@@ -143,17 +173,17 @@ export type MediaAssetRow = {
 };
 
 async function finalizeAsset(input: {
-  signed: SignedUpload; file: File; sha256: string; propertyId?: string;
+  signed: SignedUpload; file: File; kind: 'image' | 'video'; sha256: string; propertyId?: string;
 }): Promise<MediaAssetRow> {
   assertApi();
-  const contentType = input.file.type === 'image/heif' ? 'image/heic' : input.file.type;
+  const contentType = normaliseContentType(input.file.type, input.kind);
   const res = await fetch(`${API_BASE}/v1/media`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...bearer() },
     body: JSON.stringify({
       assetId: input.signed.assetId,
       providerKey: input.signed.providerKey,
-      kind: 'image',
+      kind: input.kind,
       contentType,
       sizeBytes: input.file.size,
       sha256: input.sha256,
@@ -161,7 +191,7 @@ async function finalizeAsset(input: {
       visibility: 'private',
     }),
   });
-  if (!res.ok) throw new MediaUploadError('FINALIZE_FAILED', 'تعذّر تسجيل الصورة، حاول مجددًا.');
+  if (!res.ok) throw new MediaUploadError('FINALIZE_FAILED', 'تعذّر تسجيل الملف، حاول مجددًا.');
   const raw = await res.json() as { id: string; propertyId: string | null; kind: string; mimeType: string; sizeBytes: number; visibility: 'public' | 'private'; createdAt: string };
   return { ...raw, url: null };
 }
@@ -170,13 +200,13 @@ async function finalizeAsset(input: {
 export async function uploadOne(input: {
   file: File; propertyId?: string; onProgress?: UploadProgress;
 }): Promise<MediaAssetRow> {
-  validateFile(input.file);
+  const kind = validateFile(input.file);
   const digest = await sha256Hex(input.file);
-  const signed = await requestUploadUrl({ file: input.file, propertyId: input.propertyId, sha256: digest });
+  const signed = await requestUploadUrl({ file: input.file, kind, propertyId: input.propertyId, sha256: digest });
   const target = normaliseUploadUrl(signed.uploadUrl);
-  const contentType = input.file.type === 'image/heif' ? 'image/heic' : input.file.type;
+  const contentType = normaliseContentType(input.file.type, kind);
   await putFileWithProgress(target, input.file, contentType, signed.headers ?? {}, input.onProgress);
-  return await finalizeAsset({ signed, file: input.file, sha256: digest, propertyId: input.propertyId });
+  return await finalizeAsset({ signed, file: input.file, kind, sha256: digest, propertyId: input.propertyId });
 }
 
 /** List the caller's media, optionally scoped to one property. */
@@ -201,7 +231,16 @@ export async function deleteMedia(id: string): Promise<void> {
   if (!res.ok) throw new MediaUploadError('DELETE_FAILED', 'تعذّر حذف الصورة.');
 }
 
+/** Absolute URL to a local-provider stream endpoint, wrapped with the API base. */
+export function resolveMediaUrl(u: string | null | undefined): string | null {
+  if (!u) return null;
+  if (u.startsWith('/')) return `${API_BASE}${u}`;
+  return u;
+}
+
 export const MEDIA_LIMITS = {
-  maxBytes: MAX_BYTES,
-  allowedMime: Array.from(ALLOWED_MIME),
+  imageMaxBytes: IMAGE_MAX_BYTES,
+  videoMaxBytes: VIDEO_MAX_BYTES,
+  allowedImageMime: Array.from(ALLOWED_IMAGE_MIME),
+  allowedVideoMime: Array.from(ALLOWED_VIDEO_MIME),
 };

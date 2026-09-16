@@ -26,11 +26,14 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  MediaUploadError, MEDIA_LIMITS, deleteMedia, listMedia, uploadOne,
+  MediaUploadError, MEDIA_LIMITS, deleteMedia, listMedia, resolveMediaUrl, uploadOne,
   type MediaAssetRow,
 } from '@/lib/media-upload';
+import { VideoRecorderModal } from '@/components/VideoRecorderModal';
 
-const ACCEPT = 'image/jpeg,image/png,image/webp,image/heic,image/heif';
+const ACCEPT_IMAGE = 'image/jpeg,image/png,image/webp,image/heic,image/heif';
+const ACCEPT_VIDEO = 'video/mp4,video/quicktime,video/webm';
+const VIDEO_MAX_DURATION_SECONDS = 180;
 
 type QueueItem = {
   key: string;
@@ -49,8 +52,10 @@ export function PropertyMediaGallery({ propertyId }: Props) {
   const [order, setOrder] = useState<string[]>([]); // client-side ordering of uploaded ids
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [listErr, setListErr] = useState<string | null>(null);
+  const [recorderOpen, setRecorderOpen] = useState(false);
   const cameraRef = useRef<HTMLInputElement>(null);
   const albumRef = useRef<HTMLInputElement>(null);
+  const videoAlbumRef = useRef<HTMLInputElement>(null);
 
   const reload = useCallback(async () => {
     try {
@@ -175,21 +180,34 @@ export function PropertyMediaGallery({ propertyId }: Props) {
       <PropertyMediaStyles />
       <div className="pmg" dir="rtl">
         <div className="pmg-hint">
-          يمكنك تصوير العقار مباشرة من كاميرا الجوال أو اختيار عدة صور من الألبوم.
-          الحد الأقصى لكل صورة {Math.round(MEDIA_LIMITS.maxBytes / (1024 * 1024))} ميجابايت.
+          صوّر العقار مباشرة من الكاميرا، اختر صوراً من الألبوم، أو أضف فيديو قصير.
+          الحد للصورة {Math.round(MEDIA_LIMITS.imageMaxBytes / (1024 * 1024))} م.ب،
+          وللفيديو {Math.round(MEDIA_LIMITS.videoMaxBytes / (1024 * 1024))} م.ب.
         </div>
         <div className="pmg-actions">
           <button type="button" className="pmg-btn primary" onClick={() => cameraRef.current?.click()}>
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>
             </svg>
-            فتح الكاميرا
+            التقاط صورة
           </button>
           <button type="button" className="pmg-btn" onClick={() => albumRef.current?.click()}>
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10.5" r="1.5"/><path d="m21 17-6-6-8 8"/>
             </svg>
-            اختيار من الصور
+            اختيار صور
+          </button>
+          <button type="button" className="pmg-btn" onClick={() => setRecorderOpen(true)}>
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <rect x="3" y="6" width="14" height="12" rx="2"/><path d="m17 10 4-2v8l-4-2z"/>
+            </svg>
+            تصوير فيديو
+          </button>
+          <button type="button" className="pmg-btn" onClick={() => videoAlbumRef.current?.click()}>
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M4 4h12v16H4z"/><path d="m10 9 5 3-5 3z"/>
+            </svg>
+            اختيار فيديو
           </button>
         </div>
 
@@ -197,7 +215,7 @@ export function PropertyMediaGallery({ propertyId }: Props) {
         <input
           ref={cameraRef}
           type="file"
-          accept={ACCEPT}
+          accept={ACCEPT_IMAGE}
           capture="environment"
           onChange={(e) => { enqueueFiles(e.currentTarget.files); e.currentTarget.value = ''; }}
           style={{ display: 'none' }}
@@ -205,23 +223,50 @@ export function PropertyMediaGallery({ propertyId }: Props) {
         <input
           ref={albumRef}
           type="file"
-          accept={ACCEPT}
+          accept={ACCEPT_IMAGE}
           multiple
           onChange={(e) => { enqueueFiles(e.currentTarget.files); e.currentTarget.value = ''; }}
           style={{ display: 'none' }}
         />
+        <input
+          ref={videoAlbumRef}
+          type="file"
+          accept={ACCEPT_VIDEO}
+          onChange={(e) => { enqueueFiles(e.currentTarget.files); e.currentTarget.value = ''; }}
+          style={{ display: 'none' }}
+        />
+
+        {recorderOpen && (
+          <VideoRecorderModal
+            maxDurationSeconds={VIDEO_MAX_DURATION_SECONDS}
+            onClose={() => setRecorderOpen(false)}
+            onCaptured={(file) => {
+              // The DataTransfer trick lets us reuse the existing enqueueFiles path.
+              const dt = new DataTransfer();
+              dt.items.add(file);
+              enqueueFiles(dt.files);
+              setRecorderOpen(false);
+            }}
+          />
+        )}
 
         {listErr && <div role="alert" className="pmg-alert">{listErr}</div>}
 
         {(orderedUploaded.length > 0 || queue.length > 0) && (
           <ul className="pmg-grid">
-            {orderedUploaded.map((it, i) => (
+            {orderedUploaded.map((it, i) => {
+              const resolved = resolveMediaUrl(it.url);
+              const isVideo = it.kind === 'video';
+              return (
               <li key={it.id} className="pmg-card">
                 <div className="pmg-thumb">
-                  {it.url
-                    ? <img src={it.url} alt="" loading="lazy" />
-                    : <div className="pmg-thumb-fallback">صورة</div>}
-                  {i === 0 && <span className="pmg-primary" title="الصورة الرئيسية">رئيسية</span>}
+                  {resolved
+                    ? (isVideo
+                        ? <video src={resolved} controls playsInline preload="metadata" />
+                        : <img src={resolved} alt="" loading="lazy" />)
+                    : <div className="pmg-thumb-fallback">{isVideo ? 'فيديو' : 'صورة'}</div>}
+                  {i === 0 && <span className="pmg-primary" title="الوسيط الرئيسي">رئيسية</span>}
+                  {isVideo && <span className="pmg-video-tag" aria-hidden="true">فيديو</span>}
                 </div>
                 <div className="pmg-row">
                   <button type="button" className="pmg-icon" aria-label="نقل لليسار" onClick={() => move(it.id, -1)}>‹</button>
@@ -230,7 +275,8 @@ export function PropertyMediaGallery({ propertyId }: Props) {
                   <button type="button" className="pmg-icon danger" aria-label="حذف" onClick={() => void removeUploaded(it.id)}>✕</button>
                 </div>
               </li>
-            ))}
+              );
+            })}
 
             {queue.filter((q) => q.status !== 'done').map((q) => (
               <li key={q.key} className={`pmg-card q-${q.status}`}>
@@ -298,6 +344,11 @@ function PropertyMediaStyles() {
         position: absolute; top: 6px; inset-inline-start: 6px;
         padding: 2px 8px; border-radius: 999px;
         background: #2E9E77; color: #fff; font-size: 10.5px; font-weight: 800;
+      }
+      .pmg-video-tag {
+        position: absolute; top: 6px; inset-inline-end: 6px;
+        padding: 2px 8px; border-radius: 999px;
+        background: rgba(0, 0, 0, 0.55); color: #fff; font-size: 10.5px; font-weight: 800;
       }
       .pmg-progress {
         position: absolute; inset-inline: 8px; bottom: 8px; height: 4px;

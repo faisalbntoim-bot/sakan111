@@ -16,12 +16,15 @@
 export type MediaKind = 'image' | 'video' | 'document';
 export type Visibility = 'private' | 'public';
 
-export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024; // 25 MB — refuse anything larger
+export const MAX_UPLOAD_BYTES = 500 * 1024 * 1024; // 500 MB — outer safety net (per-file limits in config)
 
-/** MIME allowlist per kind — server rejects anything outside this list. */
+/** MIME allowlist per kind — server rejects anything outside this list.
+ *  Codec parameters (e.g. `video/webm;codecs=vp9,opus`) are stripped by
+ *  the client before hitting `assertUploadShape`, so only the base MIME
+ *  needs to appear here. */
 export const ALLOWED_CONTENT_TYPES: Record<MediaKind, string[]> = {
-  image:    ['image/jpeg', 'image/png', 'image/webp', 'image/heic'],
-  video:    ['video/mp4', 'video/quicktime'],
+  image:    ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'],
+  video:    ['video/mp4', 'video/quicktime', 'video/webm'],
   document: ['application/pdf'],
 };
 

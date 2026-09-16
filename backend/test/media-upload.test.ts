@@ -214,15 +214,16 @@ describe('POST /v1/media/upload-url', () => {
     await app.close();
   });
 
-  it('issues a signed URL for a valid image request', async () => {
+  it('issues a signed URL for a valid image request (no propertyId — general asset)', async () => {
     const me = await makeUser('+9660011022');
     const app = await server();
     const res = await app.inject({
       method: 'POST', url: '/v1/media/upload-url',
       headers: { 'x-user-id': me.id, 'x-user-role': 'OWNER', 'content-type': 'application/json' },
+      // No propertyId here — the new ownership check only fires when it's supplied.
       payload: {
         kind: 'image', contentType: 'image/jpeg',
-        sizeBytes: 12345, sha256: '0'.repeat(64), propertyId: 'p_ok',
+        sizeBytes: 12345, sha256: '0'.repeat(64),
       },
     });
     expect(res.statusCode).toBe(200);
@@ -230,6 +231,75 @@ describe('POST /v1/media/upload-url', () => {
     expect(body.uploadUrl).toMatch(/^sandbox:\/\//); // sandbox scheme preserved
     expect(body.assetId).toBeTruthy();
     expect(body.providerKey).toContain(me.id);
+    await app.close();
+  });
+});
+
+// ---- Property ownership check on upload-url -----------------------
+
+describe('POST /v1/media/upload-url — property ownership', () => {
+  it('non-owner sees 404 when trying to attach media to another user\'s property', async () => {
+    const me = await makeUser('+9660011030');
+    const other = await makeUser('+9660011031');
+    const otherProp = await getPrisma().property.create({
+      data: { listingNumber: 'L-OWN-1', ownerId: other.id, category: 'apartment', purpose: 'rent' },
+    });
+    const app = await server();
+    const res = await app.inject({
+      method: 'POST', url: '/v1/media/upload-url',
+      headers: { 'x-user-id': me.id, 'x-user-role': 'OWNER', 'content-type': 'application/json' },
+      payload: { kind: 'image', contentType: 'image/jpeg', sizeBytes: 100, sha256: '0'.repeat(64), propertyId: otherProp.id },
+    });
+    expect(res.statusCode).toBe(404);
+    await app.close();
+  });
+
+  it('owner can attach to their own property', async () => {
+    const me = await makeUser('+9660011032');
+    const myProp = await getPrisma().property.create({
+      data: { listingNumber: 'L-OWN-2', ownerId: me.id, category: 'apartment', purpose: 'rent' },
+    });
+    const app = await server();
+    const res = await app.inject({
+      method: 'POST', url: '/v1/media/upload-url',
+      headers: { 'x-user-id': me.id, 'x-user-role': 'OWNER', 'content-type': 'application/json' },
+      payload: { kind: 'image', contentType: 'image/jpeg', sizeBytes: 100, sha256: '0'.repeat(64), propertyId: myProp.id },
+    });
+    expect(res.statusCode).toBe(200);
+    await app.close();
+  });
+});
+
+// ---- Per-kind size limits ----------------------------------------
+
+describe('POST /v1/media/upload-url — per-kind limits from env', () => {
+  it('rejects an image over MEDIA_IMAGE_MAX_BYTES', async () => {
+    const me = await makeUser('+9660011040');
+    const app = await server();
+    const orig = config.MEDIA_IMAGE_MAX_BYTES;
+    (config as unknown as { MEDIA_IMAGE_MAX_BYTES: number }).MEDIA_IMAGE_MAX_BYTES = 1024;
+    try {
+      const res = await app.inject({
+        method: 'POST', url: '/v1/media/upload-url',
+        headers: { 'x-user-id': me.id, 'x-user-role': 'OWNER', 'content-type': 'application/json' },
+        payload: { kind: 'image', contentType: 'image/jpeg', sizeBytes: 5000, sha256: '0'.repeat(64) },
+      });
+      expect(res.statusCode).toBe(400);
+    } finally {
+      (config as unknown as { MEDIA_IMAGE_MAX_BYTES: number }).MEDIA_IMAGE_MAX_BYTES = orig;
+    }
+    await app.close();
+  });
+
+  it('accepts a webm video request when under MEDIA_VIDEO_MAX_BYTES', async () => {
+    const me = await makeUser('+9660011041');
+    const app = await server();
+    const res = await app.inject({
+      method: 'POST', url: '/v1/media/upload-url',
+      headers: { 'x-user-id': me.id, 'x-user-role': 'OWNER', 'content-type': 'application/json' },
+      payload: { kind: 'video', contentType: 'video/webm', sizeBytes: 1_000_000, sha256: '0'.repeat(64) },
+    });
+    expect(res.statusCode).toBe(200);
     await app.close();
   });
 });

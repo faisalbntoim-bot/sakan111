@@ -11,6 +11,7 @@
 
 import { config } from '../config.js';
 import { SandboxStorageProvider } from './sandbox.js';
+import { LocalStorageProvider } from './local.js';
 import { S3StorageProvider, type S3Config } from './s3.js';
 import type { StorageProvider } from './storage-provider.js';
 
@@ -28,6 +29,12 @@ function buildFromEnv(): StorageProvider {
       publicBaseUrl: config.S3_PUBLIC_BASE_URL,
     };
     return new S3StorageProvider(s3cfg);
+  }
+  if (config.STORAGE_PROVIDER === 'local') {
+    return new LocalStorageProvider({
+      dir: config.LOCAL_STORAGE_DIR!,
+      signingSecret: config.MEDIA_UPLOAD_SIGNING_SECRET!,
+    });
   }
   return new SandboxStorageProvider();
 }

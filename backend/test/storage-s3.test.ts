@@ -131,7 +131,8 @@ describe('S3StorageProvider signUpload / signDownload', () => {
     const p = new S3StorageProvider(cfg());
     await expect(p.signUpload({
       ownerUserId: 'u', kind: 'image', contentType: 'image/jpeg',
-      sizeBytes: 500 * 1024 * 1024, sha256: '0'.repeat(64), visibility: 'private',
+      // Above MAX_UPLOAD_BYTES (500 MB). Use 512 MB + 1 to be unambiguously over.
+      sizeBytes: 512 * 1024 * 1024 + 1, sha256: '0'.repeat(64), visibility: 'private',
     })).rejects.toThrow();
   });
 
