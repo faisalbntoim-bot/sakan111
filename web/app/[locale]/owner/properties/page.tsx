@@ -24,6 +24,7 @@ import {
 } from '@/lib/property-authoring';
 import { halalahsFromSAR, sarFromHalalahs, formatHalalahsAr } from '@/lib/property-money';
 import { computeCompleteness } from '@/lib/property-completeness';
+import { PropertyMediaGallery } from '@/components/PropertyMediaGallery';
 
 type StepIdx = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
 const STEP_TITLES: [string, ...string[]] = [
@@ -371,10 +372,7 @@ function Editor({
         )}
 
         {step === 6 && (
-          <div className="pa-media-note">
-            <p>رفع الصور والوسائط قيد التفعيل عبر خدمة الوسائط الموحّدة (/v1/media/uploads).</p>
-            <p className="pa-muted">حتى تفعيل الواجهة، تُدار الوسائط من الإدارة أو من عملية الرفع الحالية في التطبيق.</p>
-          </div>
+          <PropertyMediaGallery propertyId={initial.id} />
         )}
 
         {step === 7 && <PreviewPanel state={state} initial={initial} />}

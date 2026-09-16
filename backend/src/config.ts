@@ -72,6 +72,23 @@ const schema = z.object({
    *  one of those roles. Rotating the row's role revokes future issuance
    *  automatically. */
   SAKAN_INTERNAL_ADMIN_USER_ID: z.string().optional(),
+
+  // ---- Object storage (property images, KYC docs, invoices, tour glbs) ----
+  /** `sandbox` (default; in-memory dev sink) or `s3` (real signed URLs). */
+  STORAGE_PROVIDER: z.enum(['sandbox', 's3']).default('sandbox'),
+  /** S3-family bucket name. Required when STORAGE_PROVIDER=s3. */
+  S3_BUCKET: z.string().optional(),
+  /** AWS region string (e.g. eu-central-1). For R2 use `auto`. */
+  S3_REGION: z.string().optional(),
+  S3_ACCESS_KEY_ID: z.string().optional(),
+  S3_SECRET_ACCESS_KEY: z.string().optional(),
+  /** Optional custom endpoint. Set for R2 / MinIO / DO Spaces; omit for AWS S3. */
+  S3_ENDPOINT: z.string().url().optional(),
+  /** MinIO / some proxies require path-style addressing. */
+  S3_FORCE_PATH_STYLE: z.coerce.boolean().default(false),
+  /** Optional public base URL when a CDN sits in front of the bucket. Signed
+   *  GET URLs are re-hosted through this base while the signature stays valid. */
+  S3_PUBLIC_BASE_URL: z.string().url().optional(),
 });
 
 export const config = schema.parse(process.env);
@@ -104,6 +121,15 @@ function assertProdSafety(cfg: Config): void {
   }
   if (cfg.CORS_ALLOWED_ORIGINS.trim() === '*') {
     problems.push('CORS_ALLOWED_ORIGINS=* is not allowed in production; whitelist explicit origins');
+  }
+  if (cfg.STORAGE_PROVIDER === 'sandbox') {
+    problems.push('STORAGE_PROVIDER=sandbox is not allowed in production; set STORAGE_PROVIDER=s3 and configure S3_*');
+  }
+  if (cfg.STORAGE_PROVIDER === 's3') {
+    if (!cfg.S3_BUCKET)            problems.push('S3_BUCKET is required when STORAGE_PROVIDER=s3');
+    if (!cfg.S3_REGION)            problems.push('S3_REGION is required when STORAGE_PROVIDER=s3');
+    if (!cfg.S3_ACCESS_KEY_ID)     problems.push('S3_ACCESS_KEY_ID is required when STORAGE_PROVIDER=s3');
+    if (!cfg.S3_SECRET_ACCESS_KEY) problems.push('S3_SECRET_ACCESS_KEY is required when STORAGE_PROVIDER=s3');
   }
 
   if (problems.length > 0) {
