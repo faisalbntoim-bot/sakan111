@@ -394,6 +394,7 @@
     splashDone:false, onboardDone:false, onboardIdx:0, aboutOpen:false, dark:false,
     brokersOpen:false, brokerHood:'حي الملقا',
     captureOpen:false, captureMode:'photo', captureShots:[], studioOpen:false, captureFlash:false,
+    captureRecording:false, captureRecSecs:0, captureError:null, shotPreviewIdx:-1,
   };
   let _toastTimer=null, _dlTimers={}, _arTimer=null, _liveObs=null;
   // only the on-screen card runs its live photo rotation (keeps it smooth)
@@ -445,6 +446,309 @@
   }
   function filtersActive(){ return state.neighborhoodFilter!=='all' || state.priceBucket!=='all' || state.roomsFilter!==0; }
   function distTo(p){ const loc=state.userLoc; return loc? haversineKm(loc.lat,loc.lng,p.lat,p.lng) : null; }
+
+  /* ---------- live camera + recorder manager -----------------------
+   * Wraps getUserMedia + MediaRecorder so the "capture" panel gets a
+   * real device video feed instead of the old SVG "room" background.
+   *
+   * Contract:
+   *   start()        → Promise<null | string>  null on success, Arabic error string otherwise
+   *   stop()         → tears the stream down, releases mic/camera
+   *   ensureVideo()  → re-attaches the current stream after each render
+   *                    (the SPA replaces innerHTML wholesale on every setState,
+   *                    so the <video> node is a fresh element each time)
+   *   snapshot()     → Promise<{blob,file,mime} | null>  grabs a JPEG frame
+   *   startRecord()  → null | string
+   *   stopRecord()   → Promise<{blob,file,mime,durationMs} | null>
+   *   isRecording()  → boolean
+   *
+   * Chosen video MIME is negotiated at record-time via
+   * MediaRecorder.isTypeSupported to stay compatible with iOS Safari
+   * (video/mp4 only), Android Chrome (webm/vp8|vp9), desktop Firefox (webm)
+   * — never forces an unsupported codec. */
+  const CamMgr = (function(){
+    let stream=null, video=null, recorder=null, chunks=[], recording=false;
+    let recStartedAt=0, recTimer=null, recMime='';
+
+    function ensureVideo(){
+      const el = document.getElementById('sakan-live-camera');
+      if(!el) return null;
+      if(video !== el){
+        video = el;
+        if(stream){
+          try{
+            video.srcObject = stream;
+            video.muted = true;
+            video.playsInline = true;
+            video.setAttribute('playsinline','');
+            const p = video.play();
+            if(p && typeof p.catch==='function') p.catch(()=>{});
+          }catch{}
+        }
+      }
+      return video;
+    }
+
+    async function start(){
+      if(stream){ ensureVideo(); return null; }
+      if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+        return '❌ الكاميرا غير مدعومة في هذا المتصفح';
+      }
+      if(location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1'){
+        return '⚠️ يلزم HTTPS لفتح الكاميرا';
+      }
+      try{
+        const s = await navigator.mediaDevices.getUserMedia({
+          video:{ facingMode:{ ideal:'environment' } },
+          audio:true,
+        });
+        stream = s;
+        ensureVideo();
+        return null;
+      }catch(err){
+        if(err && err.name === 'NotAllowedError') return '⚠️ تم رفض إذن الكاميرا';
+        if(err && err.name === 'NotFoundError')   return '❌ لا توجد كاميرا متاحة';
+        return '❌ تعذّر فتح الكاميرا';
+      }
+    }
+
+    function stop(){
+      _stopRecTimer();
+      if(recorder && recording){ try{ recorder.stop(); }catch{} }
+      recording = false; recorder = null; chunks = [];
+      if(stream){ stream.getTracks().forEach(t=>{ try{ t.stop(); }catch{} }); stream = null; }
+      if(video){ try{ video.pause(); video.srcObject = null; }catch{} video = null; }
+    }
+
+    function snapshot(){
+      if(!stream) return Promise.resolve(null);
+      const v = ensureVideo();
+      if(!v) return Promise.resolve(null);
+      const w = v.videoWidth || 1280;
+      const h = v.videoHeight || 720;
+      if(!w || !h) return Promise.resolve(null);
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      try{ c.getContext('2d').drawImage(v, 0, 0, w, h); }
+      catch{ return Promise.resolve(null); }
+      return new Promise(resolve=>{
+        c.toBlob(b=>{
+          if(!b){ resolve(null); return; }
+          const file = new File([b], `sakan-${Date.now()}.jpg`, { type:'image/jpeg' });
+          resolve({ blob:b, file, mime:'image/jpeg' });
+        }, 'image/jpeg', 0.9);
+      });
+    }
+
+    function pickMime(){
+      const cands = ['video/mp4','video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm'];
+      if(typeof MediaRecorder === 'undefined' || typeof MediaRecorder.isTypeSupported !== 'function') return '';
+      for(const c of cands){ if(MediaRecorder.isTypeSupported(c)) return c; }
+      return '';
+    }
+
+    function startRecord(){
+      if(!stream) return '⚠️ الكاميرا غير جاهزة';
+      if(recording) return null;
+      if(typeof MediaRecorder === 'undefined') return '❌ تسجيل الفيديو غير مدعوم';
+      const mime = pickMime();
+      try{
+        recorder = mime ? new MediaRecorder(stream, { mimeType:mime }) : new MediaRecorder(stream);
+      }catch{
+        try{ recorder = new MediaRecorder(stream); }
+        catch{ return '❌ تعذّر بدء التسجيل'; }
+      }
+      recMime = recorder.mimeType || mime || 'video/webm';
+      chunks = [];
+      const done = new Promise(res=>{ recorder.onstop = ()=> res(); });
+      recorder._donePromise = done;
+      recorder.ondataavailable = e=>{ if(e.data && e.data.size) chunks.push(e.data); };
+      recorder.onerror = ()=>{};
+      recorder.start();
+      recording = true;
+      recStartedAt = Date.now();
+      _startRecTimer();
+      return null;
+    }
+
+    async function stopRecord(){
+      if(!recording || !recorder) return null;
+      _stopRecTimer();
+      const p = recorder._donePromise;
+      try{ recorder.stop(); }catch{}
+      recording = false;
+      await p;
+      const mime = recMime || 'video/webm';
+      const durationMs = Date.now() - recStartedAt;
+      const blob = new Blob(chunks, { type:mime });
+      chunks = []; recorder = null;
+      if(!blob.size) return null;
+      const ext = mime.indexOf('mp4') !== -1 ? 'mp4' : 'webm';
+      const file = new File([blob], `sakan-${Date.now()}.${ext}`, { type:mime });
+      return { blob, file, mime, durationMs };
+    }
+
+    function isRecording(){ return recording; }
+
+    function _startRecTimer(){
+      _stopRecTimer();
+      recTimer = setInterval(()=>{
+        const el = document.querySelector('.cap-rec-timer');
+        if(!el){ return; }
+        const s = Math.floor((Date.now() - recStartedAt) / 1000);
+        const mm = String(Math.floor(s/60)).padStart(2,'0');
+        const ss = String(s%60).padStart(2,'0');
+        el.textContent = `${mm}:${ss}`;
+      }, 250);
+    }
+    function _stopRecTimer(){ if(recTimer){ clearInterval(recTimer); recTimer = null; } }
+
+    return { start, stop, ensureVideo, snapshot, startRecord, stopRecord, isRecording };
+  })();
+
+  /* ---------- fallback + studio pickers ----------------------------
+   * Reuses one hidden <input> per role so repeated opens don't leak
+   * DOM nodes. The change listener wraps whatever the OS picker returns
+   * as real Files (image/video) and drops them into captureShots via
+   * addFilesToShots() — same shape as camera-captured shots. */
+  let _studioInput = null, _fallbackInput = null;
+
+  function addFilesToShots(files){
+    if(!files || !files.length) return;
+    const arr = Array.from(files).slice(0, 12);
+    const wrapped = arr.map(f=>{
+      const isVid = (f.type || '').indexOf('video/') === 0;
+      return {
+        src: URL.createObjectURL(f),
+        kind: isVid ? 'video' : 'photo',
+        file: f,
+        mimeType: f.type || (isVid ? 'video/webm' : 'image/jpeg'),
+        size: f.size,
+        fromStudio: true,
+      };
+    });
+    setState(s=>({ captureShots: [...wrapped, ...s.captureShots].slice(0, 12) }));
+  }
+
+  function _ensureStudioInput(){
+    if(_studioInput) return _studioInput;
+    const inp = document.createElement('input');
+    inp.type = 'file';
+    inp.accept = 'image/*,video/*';
+    inp.multiple = true;
+    inp.style.position = 'fixed'; inp.style.inset = '-9999px'; inp.style.opacity = '0';
+    inp.addEventListener('change', ()=>{
+      if(inp.files && inp.files.length){ addFilesToShots(inp.files); }
+      inp.value = '';
+    });
+    document.body.appendChild(inp);
+    _studioInput = inp;
+    return inp;
+  }
+  function _openStudioPicker(){ _ensureStudioInput().click(); }
+
+  function _openFallbackCapture(kind){
+    if(!_fallbackInput){
+      const inp = document.createElement('input');
+      inp.type = 'file';
+      inp.style.position = 'fixed'; inp.style.inset = '-9999px'; inp.style.opacity = '0';
+      inp.addEventListener('change', ()=>{
+        if(inp.files && inp.files.length){ addFilesToShots(inp.files); }
+        inp.value = '';
+      });
+      document.body.appendChild(inp);
+      _fallbackInput = inp;
+    }
+    _fallbackInput.accept = (kind === 'video') ? 'video/*' : 'image/*';
+    _fallbackInput.setAttribute('capture', 'environment');
+    _fallbackInput.click();
+  }
+
+  /* ---------- inline upload (mirrors lib/media-upload.ts) ----------
+   * The React app has a typed helper for this exact pipeline
+   * (web/lib/media-upload.ts). The SPA is vanilla JS loaded from
+   * public/vendor/ and cannot import it, so we replay the same
+   * fetch calls with the same shapes. Contract is deliberately narrow:
+   *   1. hash the bytes → SHA-256 hex
+   *   2. POST /v1/media/upload-url → signed target
+   *   3. PUT bytes → signed URL (sandbox:// rewritten to same-origin)
+   *   4. POST /v1/media → register the MediaAsset row
+   * Backend, Prisma, storage provider all unchanged. */
+  function _apiBase(){
+    return (window.__SAKAN_API_BASE || '').replace(/\/+$/, '');
+  }
+  async function _sha256Hex(file){
+    const buf = await file.arrayBuffer();
+    const dig = await window.crypto.subtle.digest('SHA-256', buf);
+    const bytes = new Uint8Array(dig);
+    let hex = '';
+    for(let i=0;i<bytes.length;i++) hex += bytes[i].toString(16).padStart(2,'0');
+    return hex;
+  }
+  function _baseMime(t){ const i = t.indexOf(';'); return i === -1 ? t : t.slice(0,i).trim(); }
+  function _normContentType(raw, kind){
+    const b = _baseMime(raw||'');
+    return b || (kind==='image' ? 'image/jpeg' : 'video/webm');
+  }
+  function _normUploadUrl(u){
+    const base = _apiBase();
+    if(u.indexOf('sandbox://upload/') === 0){
+      const rest = u.slice('sandbox://upload/'.length);
+      const q = rest.indexOf('?');
+      const key = q === -1 ? rest : rest.slice(0, q);
+      return `${base}/v1/media/sandbox-upload/${key}`;
+    }
+    if(u.charAt(0) === '/') return base + u;
+    return u;
+  }
+  function _putBytes(url, file, ct, headers){
+    return new Promise((resolve, reject)=>{
+      const xhr = new XMLHttpRequest();
+      xhr.open('PUT', url, true);
+      xhr.setRequestHeader('content-type', ct);
+      if(headers) Object.keys(headers).forEach(k=>xhr.setRequestHeader(k, headers[k]));
+      xhr.onload = ()=>{ (xhr.status>=200 && xhr.status<300) ? resolve() : reject(new Error('PUT '+xhr.status)); };
+      xhr.onerror = ()=>reject(new Error('network'));
+      xhr.ontimeout = ()=>reject(new Error('timeout'));
+      xhr.timeout = 120000;
+      xhr.send(file);
+    });
+  }
+  /* propertyId is REQUIRED for /ar uploads — the backend allows it as
+   * optional to keep the schema flexible, but an orphaned MediaAsset
+   * (owner-scoped but not attached to any Property) is not useful to
+   * this product. publishShots() blocks the upload path when the SPA
+   * has no bound property id, so a missing propertyId here means a
+   * caller bug rather than an expected state. */
+  async function _uploadOne(file, token, propertyId){
+    const base = _apiBase();
+    if(!base) throw new Error('no api base');
+    const kind = ((file.type||'').indexOf('video/') === 0) ? 'video' : 'image';
+    const ct = _normContentType(file.type, kind);
+    const sha = await _sha256Hex(file);
+    const signBody = { kind, contentType:ct, sizeBytes:file.size, sha256:sha, visibility:'private' };
+    if(propertyId) signBody.propertyId = propertyId;
+    const r1 = await fetch(`${base}/v1/media/upload-url`, {
+      method:'POST',
+      headers:{ 'content-type':'application/json', 'authorization':'Bearer '+token },
+      body: JSON.stringify(signBody),
+    });
+    if(!r1.ok) throw new Error('sign '+r1.status);
+    const signed = await r1.json();
+    await _putBytes(_normUploadUrl(signed.uploadUrl), file, ct, signed.headers || {});
+    const finBody = {
+      assetId: signed.assetId, providerKey: signed.providerKey,
+      kind, contentType: ct, sizeBytes: file.size, sha256: sha, visibility:'private',
+    };
+    if(propertyId) finBody.propertyId = propertyId;
+    const r2 = await fetch(`${base}/v1/media`, {
+      method:'POST',
+      headers:{ 'content-type':'application/json', 'authorization':'Bearer '+token },
+      body: JSON.stringify(finBody),
+    });
+    if(!r2.ok) throw new Error('finalize '+r2.status);
+    return await r2.json();
+  }
 
   /* ---------- handlers (ported) ---------- */
   const H = {
@@ -867,8 +1171,25 @@
     withdrawEarnings(){ showToast('💸 تم إرسال طلب سحب أرباحك إلى حسابك البنكي (تجريبي)'); },
     renewRental(){ showToast('🔄 جهّزنا عقد تجديد عبر «إيجار» — بانتظار موافقة الطرفين (تجريبي)'); },
     buyService(){ showToast('🚀 تم تفعيل الخدمة — رسوم رمزية تُضاف لفاتورة مكتبك (تجريبي)'); },
-    addListing(){ setState({editOpen:true, editIdx:null, editMode:'new'}); },
-    editListing(idx){ setState({editOpen:true, editIdx:idx, editMode:'edit'}); },
+    /* "أضف عقارك" — real authoring lives at /:locale/owner/properties.
+     * That page mounts, calls fetchOwnerMe(), and either shows "عقاراتي"
+     * or redirects the visitor to /:locale/owner/login?next=/:locale/owner/properties
+     * — so the SPA doesn't need to know whether the user is signed in.
+     * Relative URLs keep the current protocol (HTTPS in production). */
+    addListing(){
+      try {
+        const loc = (window.location.pathname.split('/').filter(Boolean)[0] === 'en') ? 'en' : 'ar';
+        window.location.href = '/' + loc + '/owner/properties';
+      } catch { setState({editOpen:true, editIdx:null, editMode:'new'}); }
+    },
+    /* No per-idx deep-link on the web today — land on عقاراتي and let the
+     * owner pick the row. The SPA's local `idx` is not the DB property id. */
+    editListing(_idx){
+      try {
+        const loc = (window.location.pathname.split('/').filter(Boolean)[0] === 'en') ? 'en' : 'ar';
+        window.location.href = '/' + loc + '/owner/properties';
+      } catch { setState({editOpen:true, editIdx:null, editMode:'edit'}); }
+    },
     closeEdit(){ setState({editOpen:false}); },
     saveListing(){
       const g=id=>document.getElementById(id);
@@ -934,7 +1255,7 @@
       else if(k==='reqs') setState({authOpen:false, reqsPageOpen:true});
       else if(k==='offers') setState({authOpen:false, dealsOpen:true, dealsTab:'all'});
       else if(k==='market') setState({authOpen:false, marketOpen:true});
-      else if(k==='add') setState({authOpen:false, editOpen:true, editIdx:null, editMode:'new'});
+      else if(k==='add') { setState({authOpen:false}); H.addListing(); }
       else if(k==='notif') setState({authOpen:false, notifOpen:true});
     },
     setMktPeriod(k){ setState({mktPeriod:k}); },
@@ -1023,27 +1344,126 @@
       else if(k==='invest'){ setState({preset:k, investorMode:true}); showToast('📈 وضع الاستثمار — يظهر العائد وتحليل الاستثمار'); }
     },
     openArCapture(){ setState({officesOpen:true}); showToast('📸 تصوير العقار بالواقع المعزز (AR) — جهّز كاميرتك وابدأ المسح'); },
-    liveCapture(){ setState({captureOpen:true, studioOpen:false}); },
-    closeCapture(){ setState({captureOpen:false, studioOpen:false}); },
-    setCaptureMode(k){ setState({captureMode:k}); },
-    captureShot(){
-      const g=galleryFor(properties[state.scrollIdx]||properties[0], state.scrollIdx);
-      const src=g[(state.captureShots.length)%g.length].src;
-      const shot={src, kind:state.captureMode};
+    /* "التصوير المباشر" — opens the in-app capture panel and immediately
+     * requests real camera access via getUserMedia. The panel used to
+     * paint a static SVG "room" over `.cap-live-bg` and the shutter
+     * pulled from a pre-baked photo pool; both are gone. The <video>
+     * element mounted by captureHtml() gets a real MediaStream bound
+     * to `srcObject` right after render (see CamMgr.ensureVideo). */
+    async liveCapture(){
+      setState({captureOpen:true, studioOpen:false, captureError:null,
+                captureRecording:false, captureRecSecs:0, shotPreviewIdx:-1});
+      // Wait one frame so the <video> node exists in the DOM, then start.
+      requestAnimationFrame(async ()=>{
+        const err = await CamMgr.start();
+        if(err){ setState({captureError:err}); }
+      });
+    },
+    closeCapture(){
+      // Stop tracks + release the recorder so mic/cam don't keep running.
+      CamMgr.stop();
+      setState({captureOpen:false, studioOpen:false, captureRecording:false, shotPreviewIdx:-1});
+    },
+    setCaptureMode(k){
+      // Never allow mode switch mid-recording — it would silently drop the take.
+      if(state.captureRecording) return;
+      setState({captureMode:k});
+    },
+    /* Shutter tap:
+     *   - photo mode → grab a canvas frame from <video>, wrap as a real File.
+     *   - video mode → toggle MediaRecorder (start on first tap, stop on second). */
+    async captureShot(){
+      if(state.captureMode==='video'){
+        if(!CamMgr.isRecording()){
+          const err = CamMgr.startRecord();
+          if(err){ showToast(err); return; }
+          setState({captureRecording:true, captureRecSecs:0});
+        } else {
+          const res = await CamMgr.stopRecord();
+          setState({captureRecording:false});
+          if(!res){ showToast('⚠️ لم يُسجَّل مقطع'); return; }
+          const src = URL.createObjectURL(res.blob);
+          const shot = { src, kind:'video', file:res.file, mimeType:res.mime,
+                         size:res.file.size, durationMs:res.durationMs, fromCamera:true };
+          setState(s=>({captureShots:[shot,...s.captureShots].slice(0,12), captureFlash:true}));
+          setTimeout(()=>setState({captureFlash:false}),180);
+          showToast('🎬 تم تسجيل المقطع');
+        }
+        return;
+      }
+      // photo
+      const res = await CamMgr.snapshot();
+      if(!res){
+        // No live stream (permission denied / unsupported) → OS camera fallback.
+        _openFallbackCapture('photo');
+        return;
+      }
+      const src = URL.createObjectURL(res.blob);
+      const shot = { src, kind:'photo', file:res.file, mimeType:'image/jpeg',
+                     size:res.file.size, fromCamera:true };
       setState(s=>({captureShots:[shot,...s.captureShots].slice(0,12), captureFlash:true}));
       setTimeout(()=>setState({captureFlash:false}),180);
-      showToast(state.captureMode==='video'?'🎬 تم تسجيل المقطع':'📸 تم التقاط الصورة');
+      showToast('📸 تم التقاط الصورة');
     },
-    openStudio(){ setState({studioOpen:true}); },
+    /* Studio button: opens the OS file picker (images + videos) — no more mock
+     * grid of pre-baked photos. Selected files are wrapped as real Files and
+     * added to captureShots exactly like camera captures. */
+    openStudio(){ _openStudioPicker(); },
     closeStudio(){ setState({studioOpen:false}); },
-    pickStudio(i){
-      if(!_STUDIO) _STUDIO=[PHOTO_1,PHOTO_2,PHOTO_3,PHOTO_4,PHOTO_5];
-      const src=_STUDIO[i%_STUDIO.length];
-      setState(s=>({captureShots:[{src,kind:'photo',fromStudio:true},...s.captureShots].slice(0,12), studioOpen:false}));
-      showToast('✅ تم رفع الوسائط من الاستوديو');
+    removeShot(i){
+      // Revoke object URLs so long sessions don't leak memory.
+      const s = state.captureShots[i];
+      if(s && typeof s.src==='string' && s.src.slice(0,5)==='blob:'){ try{ URL.revokeObjectURL(s.src); }catch{} }
+      setState(s=>({captureShots:s.captureShots.filter((_,k)=>k!==i)}));
     },
-    removeShot(i){ setState(s=>({captureShots:s.captureShots.filter((_,k)=>k!==i)})); },
-    publishShots(){ const n=state.captureShots.length; if(!n){ showToast('التقط أو ارفع وسائط أولًا'); return; } setState({captureOpen:false, studioOpen:false, captureShots:[]}); showToast(`🚀 تم نشر ${nfA(n)} وسائط على إعلانك (تجريبي)`); },
+    openShotPreview(i){ setState({shotPreviewIdx:i}); },
+    closeShotPreview(){ setState({shotPreviewIdx:-1}); },
+    /* Publish path — every MediaAsset MUST attach to a real Property
+     * the caller owns. If the SPA has no bound property id (e.g. the
+     * visitor tapped the camera on /ar before creating any listing),
+     * we keep captureShots in memory and route them to /owner/properties
+     * to pick or create a property. NEVER invent a propertyId: the
+     * backend enforces ownership on any id supplied. */
+    async publishShots(){
+      const n = state.captureShots.length;
+      if(!n){ showToast('التقط أو ارفع وسائط أولًا'); return; }
+      let tok = null, propertyId = null;
+      try { tok = window.sessionStorage.getItem('sh_owner_token'); } catch {}
+      try { propertyId = window.sessionStorage.getItem('sh_capture_property_id'); } catch {}
+      const loc = (location.pathname.split('/').filter(Boolean)[0]==='en')?'en':'ar';
+      if(!tok){
+        showToast('يجب تسجيل الدخول لرفع الوسائط');
+        try{
+          const back = encodeURIComponent(location.pathname+location.search);
+          location.href = '/'+loc+'/owner/login?next='+back;
+        }catch{}
+        return;
+      }
+      if(!propertyId){
+        // No property bound — keep the shots in memory (captureShots is
+        // untouched) so the visitor can come back after creating/selecting
+        // one. Nudge them to the authoring surface where the binding happens.
+        showToast('اختر عقاراً أو أنشئ عقاراً لربط الوسائط');
+        try{ location.href = '/'+loc+'/owner/properties'; }catch{}
+        return;
+      }
+      showToast(`⬆️ جارٍ رفع ${nfA(n)} ملف`);
+      let ok = 0, fail = 0;
+      for(const s of state.captureShots){
+        if(!s.file){ fail++; continue; }
+        try { await _uploadOne(s.file, tok, propertyId); ok++; }
+        catch(err){ fail++; }
+      }
+      if(ok && !fail){
+        state.captureShots.forEach(s=>{ if(s.src && s.src.slice(0,5)==='blob:') try{ URL.revokeObjectURL(s.src); }catch{} });
+        setState({captureOpen:false, studioOpen:false, captureShots:[], shotPreviewIdx:-1});
+        showToast(`✅ تم رفع ${nfA(ok)} ملف`);
+      } else if(ok){
+        showToast(`⚠️ رُفع ${nfA(ok)} وفشل ${nfA(fail)}`);
+      } else {
+        showToast('❌ فشل رفع الوسائط، حاول لاحقًا');
+      }
+    },
     setLang(){ const en=state.lang!=='en'; setState({lang:en?'en':'ar'}); showToast(en?'🌐 Market translated to English — for our guests':'🌐 تمت الترجمة إلى العربية'); },
     dashCat(k){ showToast(k==='land'?'🌾 عرض أراضيك المعروضة (٣)':k==='apt'?'🏢 عرض شققك المعروضة (٨)':'🔑 عرض إيجاراتك النشطة (٥)'); },
     calcComm(){
@@ -2163,44 +2583,63 @@
     </div>`;
   }
 
-  // ---- التصوير المباشر (بنمط سناب) + الرفع من الاستوديو ----
+  // ---- التصوير المباشر: بث كاميرا حقيقي + التقاط صور وفيديو حقيقيين ----
   function captureHtml(){
-    if(!_STUDIO) _STUDIO=[PHOTO_1,PHOTO_2,PHOTO_3,PHOTO_4,PHOTO_5];
     const shots=state.captureShots||[];
     const vid=state.captureMode==='video';
+    const rec=!!state.captureRecording;
+    // Thumbnails: images use background-image; videos need a real <video>
+    // element (blob-URL video does not paint as a CSS background).
     const strip = shots.length
-      ? `<div class="cap-strip">${shots.map((s,i)=>`<div class="cap-thumb" style="background-image:url('${s.src}')">${s.kind==='video'?'<span class="ct-badge">▶</span>':''}<button class="ct-x" data-act="removeShot" data-idx="${i}">✕</button></div>`).join('')}</div>`
+      ? `<div class="cap-strip">${shots.map((s,i)=>{
+          const isVid = s.kind==='video';
+          const inner = isVid
+            ? `<video src="${s.src}" playsinline muted preload="metadata"></video><span class="ct-badge">▶</span>`
+            : `<span class="ct-badge" style="background:none"></span>`;
+          const style = isVid ? '' : ` style="background-image:url('${s.src}')"`;
+          return `<div class="cap-thumb ${isVid?'video':''}" data-act="openShotPreview" data-idx="${i}"${style}>${inner}<button class="ct-x" data-act="removeShot" data-idx="${i}" aria-label="حذف">✕</button></div>`;
+        }).join('')}</div>`
       : '';
-    const studio = `<div class="studio-sheet ${state.studioOpen?'open':''}">
-        <div class="sheet-handle"></div>
-        <div class="sheet-head"><h3>📁 الرفع من الاستوديو</h3><button class="close" data-act="closeStudio">✕</button></div>
-        <div class="studio-grid">${_STUDIO.map((src,i)=>`<button class="studio-cell" data-act="pickStudio" data-idx="${i}" style="background-image:url('${src}')"><span class="sc-pick">＋</span></button>`).join('')}</div>
-        <div class="ai-note"><span class="dot2">ⓘ</span><span>اختر صورة أو مقطعًا من معرض جهازك لإضافته إلى إعلانك — عرض توضيحي.</span></div>
-      </div>
-      <div class="studio-ov ${state.studioOpen?'open':''}" data-act="closeStudio"></div>`;
+    const errBanner = state.captureError
+      ? `<div class="cap-err">${esc(state.captureError)}</div>` : '';
+    const recOverlay = rec
+      ? `<div class="cap-rec-badge"><span class="crb-dot"></span><span class="cap-rec-timer">00:00</span></div>` : '';
+    // Full-screen preview for a captured shot (image or video, playable + audible).
+    const previewIdx = state.shotPreviewIdx;
+    const previewShot = (previewIdx>=0) ? shots[previewIdx] : null;
+    const previewOverlay = previewShot ? `<div class="cap-preview open" data-act="closeShotPreview">
+        <button class="cap-ic cap-preview-close" data-act="closeShotPreview" aria-label="إغلاق">✕</button>
+        ${previewShot.kind==='video'
+          ? `<video class="cap-preview-media" src="${previewShot.src}" playsinline controls preload="metadata"></video>`
+          : `<img class="cap-preview-media" src="${previewShot.src}" alt="معاينة الصورة">`}
+      </div>` : '';
     return `<div class="capture ${state.captureOpen?'open':''}">
       <div class="cap-view">
-        <div class="cap-live-bg">${roomSceneSvg()}</div>
+        <div class="cap-live-bg">
+          <video id="sakan-live-camera" autoplay muted playsinline></video>
+        </div>
         <div class="cap-grid3"></div>
         ${state.captureFlash?'<div class="cap-flash"></div>':''}
+        ${recOverlay}
         <div class="cap-top">
           <button class="cap-ic" data-act="closeCapture" aria-label="إغلاق">✕</button>
-          <span class="cap-live-tag ${vid?'rec':''}"><span class="clt-dot"></span>${vid?'تسجيل مباشر':'مباشر'}</span>
+          <span class="cap-live-tag ${rec?'rec':''}"><span class="clt-dot"></span>${rec?'تسجيل':'مباشر'}</span>
           <span class="cap-ic ghost">${statIconSvg('live',18)}</span>
         </div>
-        <div class="cap-hint">وجّه الكاميرا نحو العقار — ${vid?'اضغط للتسجيل':'اضغط لالتقاط صورة'}</div>
+        ${errBanner}
+        <div class="cap-hint">وجّه الكاميرا نحو العقار — ${vid?(rec?'اضغط للإيقاف':'اضغط للتسجيل'):'اضغط لالتقاط صورة'}</div>
         ${strip}
         <div class="cap-modes">
-          <button class="cap-mode ${!vid?'on':''}" data-act="setCaptureMode" data-key="photo">صورة</button>
-          <button class="cap-mode ${vid?'on':''}" data-act="setCaptureMode" data-key="video">فيديو</button>
+          <button class="cap-mode ${!vid?'on':''}" data-act="setCaptureMode" data-key="photo" ${rec?'disabled':''}>صورة</button>
+          <button class="cap-mode ${vid?'on':''}" data-act="setCaptureMode" data-key="video" ${rec?'disabled':''}>فيديو</button>
         </div>
         <div class="cap-bar">
-          <button class="cap-side" data-act="openStudio" aria-label="الرفع من الاستوديو"><span class="cs-ic">${statIconSvg('grid',20)}</span><span>الاستوديو</span></button>
-          <button class="cap-shutter ${vid?'video':''}" data-act="captureShot" aria-label="التقاط"><span class="cs-ring"></span><span class="cs-core"></span></button>
-          <button class="cap-side ${shots.length?'has':''}" data-act="publishShots" aria-label="نشر"><span class="cs-ic">${statIconSvg('live',20)}</span><span>نشر${shots.length?` (${nfA(shots.length)})`:''}</span></button>
+          <button class="cap-side" data-act="openStudio" aria-label="الاستوديو" ${rec?'disabled':''}><span class="cs-ic">${statIconSvg('grid',20)}</span><span>الاستوديو</span></button>
+          <button class="cap-shutter ${vid?'video':''} ${rec?'recording':''}" data-act="captureShot" aria-label="${rec?'إيقاف':'التقاط'}"><span class="cs-ring"></span><span class="cs-core"></span></button>
+          <button class="cap-side ${shots.length?'has':''}" data-act="publishShots" aria-label="نشر" ${rec?'disabled':''}><span class="cs-ic">${statIconSvg('live',20)}</span><span>نشر${shots.length?` (${nfA(shots.length)})`:''}</span></button>
         </div>
       </div>
-      ${studio}
+      ${previewOverlay}
     </div>`;
   }
 
@@ -4128,6 +4567,9 @@
     refreshMap();
     // immersive 360° tour: drag to look around
     wireTour();
+    // Every render replaces innerHTML wholesale, so any open <video id="sakan-live-camera">
+    // is a fresh element with no srcObject — rebind it while the capture panel is open.
+    if(state.captureOpen){ CamMgr.ensureVideo(); }
   }
   let _tourImg=null, _tourX=-30, _tourDrag=null;
   function wireTour(){
@@ -4204,8 +4646,8 @@
       case 'calDay': H.onCalDayClick(off); break;
       case 'payNow': H.payNow(); break;
       case 'setCaptureMode': H.setCaptureMode(key); break;
-      case 'pickStudio': H.pickStudio(idx); break;
       case 'removeShot': H.removeShot(idx); break;
+      case 'openShotPreview': H.openShotPreview(idx); break;
       default: if(typeof H[act]==='function') H[act](); break;
     }
   }

@@ -4934,9 +4934,13 @@ svg.leaflet-image-layer.leaflet-interactive path {
 .capture{ position:absolute; inset:0; z-index:120; background:#05100e; opacity:0; pointer-events:none; transition:opacity .3s ease; }
 .capture.open{ opacity:1; pointer-events:auto; }
 .cap-view{ position:absolute; inset:0; display:flex; flex-direction:column; }
-.cap-live-bg{ position:absolute; inset:0; }
-.cap-live-bg svg{ width:100%; height:100%; }
-.cap-live-bg::after{ content:''; position:absolute; inset:0; background:linear-gradient(180deg,rgba(4,14,12,.5),rgba(4,14,12,.12) 30%,rgba(4,14,12,.6)); }
+.cap-live-bg{ position:absolute; inset:0; background:#000; overflow:hidden; }
+.cap-live-bg video{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; background:#000; }
+/* Keep the subtle vignette that helps controls stay legible, but never
+   paint a solid tint over the live feed. The old ::after used a heavy
+   green-tinted linear-gradient plus a static SVG "room" — both removed. */
+.cap-live-bg::after{ content:''; position:absolute; inset:0; pointer-events:none;
+  background:linear-gradient(180deg,rgba(0,0,0,.22),transparent 22%,transparent 72%,rgba(0,0,0,.32)); }
 .cap-grid3{ position:absolute; inset:0; pointer-events:none;
   background-image:linear-gradient(rgba(255,255,255,.07) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.07) 1px,transparent 1px);
   background-size:33.33% 33.33%; }
@@ -4976,6 +4980,29 @@ svg.leaflet-image-layer.leaflet-interactive path {
 .studio-cell{ position:relative; aspect-ratio:1; border-radius:13px; background-size:cover; background-position:center; border:none; cursor:pointer; overflow:hidden; }
 .sc-pick{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:26px; font-weight:300; color:#fff; background:rgba(6,20,16,.3); opacity:0; transition:.15s; }
 .studio-cell:active .sc-pick{ opacity:1; }
+
+/* v99: real live-camera capture — video thumbnails, rec badge, in-app preview */
+.cap-thumb{ overflow:hidden; cursor:pointer; }
+.cap-thumb.video{ background:#000; }
+.cap-thumb video{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; border-radius:9px; pointer-events:none; }
+.cap-thumb.video .ct-badge{ background:rgba(0,0,0,.45); }
+.cap-rec-badge{ position:absolute; top:calc(16px + env(safe-area-inset-top)); left:50%; transform:translateX(-50%);
+  z-index:15; display:inline-flex; align-items:center; gap:8px; padding:6px 14px; border-radius:22px;
+  background:rgba(0,0,0,.55); color:#fff; font-size:12px; font-weight:800;
+  -webkit-backdrop-filter:blur(6px); backdrop-filter:blur(6px); }
+.crb-dot{ width:9px; height:9px; border-radius:50%; background:#F0655A; box-shadow:0 0 8px rgba(240,101,90,.9); }
+@media (prefers-reduced-motion:no-preference){ .crb-dot{ animation:asstGlow 1.1s ease-in-out infinite; } }
+.cap-rec-timer{ font-variant-numeric:tabular-nums; letter-spacing:.5px; }
+.cap-shutter.recording .cs-core{ background:#F0655A; inset:22px; border-radius:6px; }
+.cap-err{ position:relative; z-index:11; margin:8px 16px 0; padding:8px 12px; border-radius:12px;
+  background:rgba(240,101,90,.92); color:#fff; font-size:12px; font-weight:700; text-align:center;
+  box-shadow:0 4px 12px rgba(0,0,0,.25); }
+.cap-preview{ position:absolute; inset:0; z-index:130; background:rgba(0,0,0,.94);
+  display:flex; align-items:center; justify-content:center; opacity:0; pointer-events:none; transition:opacity .2s; }
+.cap-preview.open{ opacity:1; pointer-events:auto; }
+.cap-preview-media{ max-width:100%; max-height:100%; width:auto; height:auto; object-fit:contain; background:#000; }
+.cap-preview-close{ position:absolute; top:calc(14px + env(safe-area-inset-top)); inset-inline-end:14px; z-index:2; }
+button[disabled]{ opacity:.5; cursor:not-allowed; }
 
 /* تقييم المستأجرين — ملخّص مبسّط سلس (بدون أشرطة) */
 .rev-sum{ display:flex; flex-direction:row-reverse; align-items:center; gap:14px; padding:2px 2px 4px; }
