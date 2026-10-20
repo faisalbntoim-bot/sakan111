@@ -23,8 +23,18 @@
     "3000": {
       "label": "SakanHub Preview (private)",
       "visibility": "private",
-      "onAutoForward": "notify"
+      "onAutoForward": "notify",
+      "requireLocalPort": false,
+      "protocol": "https"
     }
+  },
+  // Any OTHER port a process in the Codespace binds to (notably 4000,
+  // which the backend listens on at 127.0.0.1) is explicitly IGNORED —
+  // not auto-forwarded, not shown in the Ports tab, not reachable from
+  // the public internet. Belt-and-braces alongside the backend binding
+  // only to 127.0.0.1.
+  "otherPortsAttributes": {
+    "onAutoForward": "ignore"
   },
 
   // ─────────────────────────────────────────────────────────────────────
