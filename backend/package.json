@@ -1,7 +1,7 @@
 {
   "name": "sakanhub-backend",
   "version": "0.1.0",
-  "description": "SakanHub Financial Engine — payments, commissions, tax, ledger, settlements.",
+  "description": "SakanHub Financial Engine \u2014 payments, commissions, tax, ledger, settlements.",
   "private": true,
   "type": "module",
   "scripts": {
@@ -22,7 +22,7 @@
     "@fastify/rate-limit": "^10.2.1",
     "@prisma/client": "^5.22.0",
     "@types/jsonwebtoken": "^9.0.10",
-    "fastify": "^5.1.0",
+    "fastify": "^5.12.7",
     "jsonwebtoken": "^9.0.3",
     "zod": "^3.23.8"
   },
@@ -32,5 +32,8 @@
     "tsx": "^4.19.2",
     "typescript": "^5.6.3",
     "vitest": "^2.1.5"
+  },
+  "overrides": {
+    "fast-uri": "3.1.8"
   }
 }

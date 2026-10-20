@@ -1,0 +1,5 @@
+# PostgreSQL migration history, version-controlled separately from the
+# SQLite dev-only history in prisma/migrations/. Production deploys MUST
+# apply this folder via `prisma migrate deploy --schema prisma/schema.prisma`
+# after swapping the schema's `provider` to `postgresql`.
+provider = "postgresql"

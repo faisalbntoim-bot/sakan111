@@ -13,10 +13,17 @@
 
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import { config } from '../config.js';
 import { getPrisma } from '../db.js';
-import { getCaller, isAdminRole } from '../auth/rbac.js';
+import { getCaller, isAdminRole, requireAuth } from '../auth/rbac.js';
 import { badRequest, notFound } from '../errors.js';
 import { jsonSafe } from '../money.js';
+import { buildPreferenceProfile } from '../recommendation/preferences.js';
+import { computeQualityScore } from '../recommendation/quality.js';
+import { scorePropertyForUser, scorePropertyColdStart } from '../recommendation/scorer.js';
+import { calculateFeedScore, type FeedContext } from '../services/feed-ranking.js';
+import { diversifyFeed } from '../services/feed-diversity.js';
+import { getStorage } from '../storage/index.js';
 
 const listQuery = z.object({
   page: z.coerce.number().int().min(1).max(1000).default(1),
@@ -27,6 +34,17 @@ const listQuery = z.object({
   city: z.string().max(80).optional(),
   status: z.enum(['available', 'reserved', 'sold', 'rented', 'hidden']).optional(),
   ownerId: z.string().optional(),
+  // ---- Property Data v2 filters (all optional; backward compatible) ----
+  district: z.string().max(120).optional(),
+  propertyType: z.string().max(40).optional(),          // alias for `category`
+  listingType: z.string().max(40).optional(),           // alias for `purpose`
+  minPrice: z.coerce.number().nonnegative().optional(), // in halalahs
+  maxPrice: z.coerce.number().nonnegative().optional(),
+  minArea: z.coerce.number().int().nonnegative().optional(),
+  maxArea: z.coerce.number().int().nonnegative().optional(),
+  bedrooms: z.coerce.number().int().nonnegative().max(50).optional(),
+  bathrooms: z.coerce.number().int().nonnegative().max(50).optional(),
+  furnished: z.union([z.literal('true'), z.literal('false')]).optional(),
 });
 
 const availabilityQuery = z.object({
@@ -40,6 +58,62 @@ function publicProjection<T extends { ownerId: string; officeId: string | null }
   return rest;
 }
 
+/**
+ * Hero media projection for the public feed.
+ *
+ * CRITICAL privacy contract:
+ *   - This helper NEVER signs a URL for a MediaAsset whose
+ *     `visibility !== 'public'`. The owner opts an asset into public
+ *     display through PATCH /v1/media/:id/showcase; everything else
+ *     stays private even when its parent property is PUBLISHED.
+ *   - Even for public-opted assets we re-check that the property's
+ *     advertisement lifecycle is PUBLISHED. A VERIFIED-but-not-yet-
+ *     published listing waits for the admin's final step; it does not
+ *     leak media on strength of the owner's showcase flag alone.
+ *   - The URL is HMAC-signed per the v6 storage design — no Bearer in
+ *     the URL, expires in 300s so refreshing the homepage re-signs.
+ *
+ * Per-property query (not a global `take`):
+ *   We issue two tiny `findFirst`s per property — one image, one video.
+ *   The naïve `take: n*6` could starve some properties when another has
+ *   many uploads; this guarantees each property gets its chance.
+ */
+async function projectFeedMedia(propertyIds: string[]): Promise<Map<string, Array<{ kind: string; url: string; mimeType: string }>>> {
+  const map = new Map<string, Array<{ kind: string; url: string; mimeType: string }>>();
+  if (propertyIds.length === 0) return map;
+  const prisma = getPrisma();
+  const storage = getStorage();
+  await Promise.all(propertyIds.map(async (pid) => {
+    // Belt + braces: visibility='public' on the asset AND lifecycle
+    // PUBLISHED on its property. We refetch the property's lifecycle
+    // here because the feed may have included it via a stale window
+    // (e.g. the owner just moved it back to DRAFT after publishing).
+    const prop = await prisma.property.findUnique({
+      where: { id: pid },
+      select: { advertisementLifecycle: true },
+    });
+    if (!prop || prop.advertisementLifecycle !== 'PUBLISHED') return;
+    const image = await prisma.mediaAsset.findFirst({
+      where: { propertyId: pid, kind: 'image', visibility: 'public' },
+      orderBy: { createdAt: 'asc' },
+    });
+    const video = await prisma.mediaAsset.findFirst({
+      where: { propertyId: pid, kind: 'video', visibility: 'public' },
+      orderBy: { createdAt: 'asc' },
+    });
+    const items: Array<{ kind: string; url: string; mimeType: string }> = [];
+    for (const asset of [image, video]) {
+      if (!asset) continue;
+      try {
+        const signed = await storage.signDownload(asset.providerKey, 300);
+        items.push({ kind: asset.kind, url: signed.url, mimeType: asset.mimeType });
+      } catch { /* a single signing failure must never deny the whole feed */ }
+    }
+    if (items.length > 0) map.set(pid, items);
+  }));
+  return map;
+}
+
 export default async function propertyRoutes(app: FastifyInstance) {
   app.get('/v1/properties', async (req) => {
     const caller = getCaller(req);
@@ -47,9 +121,28 @@ export default async function propertyRoutes(app: FastifyInstance) {
     const prisma = getPrisma();
 
     const where: Record<string, unknown> = {};
-    // Filters
+    // Filters — legacy names first, then their v2 aliases (v2 wins on collision)
     if (q.category) where.category = q.category;
     if (q.purpose) where.purpose = q.purpose;
+    if (q.propertyType) where.category = q.propertyType;
+    if (q.listingType) where.purpose = q.listingType;
+    if (q.city) where.city = q.city;
+    if (q.district) where.district = q.district;
+    if (q.bedrooms !== undefined) where.bedrooms = q.bedrooms;
+    if (q.bathrooms !== undefined) where.bathrooms = q.bathrooms;
+    if (q.furnished !== undefined) where.furnished = q.furnished === 'true';
+    if (q.minPrice !== undefined || q.maxPrice !== undefined) {
+      const price: Record<string, bigint> = {};
+      if (q.minPrice !== undefined) price.gte = BigInt(Math.floor(q.minPrice));
+      if (q.maxPrice !== undefined) price.lte = BigInt(Math.floor(q.maxPrice));
+      where.priceHalalahs = price;
+    }
+    if (q.minArea !== undefined || q.maxArea !== undefined) {
+      const area: Record<string, number> = {};
+      if (q.minArea !== undefined) area.gte = q.minArea;
+      if (q.maxArea !== undefined) area.lte = q.maxArea;
+      where.areaSqm = area;
+    }
 
     // Status: unauthenticated + non-admin can only see `available`.
     // Owner filter: unauthenticated cannot filter by ownerId.
@@ -151,5 +244,311 @@ export default async function propertyRoutes(app: FastifyInstance) {
       isAvailable: booked.length === 0,
       bookedRanges: booked,
     };
+  });
+
+  /**
+   * GET /v1/properties/feed — ranked property list.
+   *
+   * When `personalized=true` AND `RECOMMENDATION_ENGINE_ENABLED` is on,
+   * ranks by Recommendation Score V1 (see recommendation/scorer.ts) using
+   * the caller's inferred preference profile. Otherwise falls back to
+   * the existing "updatedAt desc" order — so if the engine ever throws,
+   * the user still gets a valid feed (see try/catch below).
+   */
+  const feedQuery = z.object({
+    page: z.coerce.number().int().min(1).max(1000).default(1),
+    pageSize: z.coerce.number().int().min(1).max(50).default(20),
+    personalized: z.union([z.literal('true'), z.literal('false'), z.boolean()]).optional(),
+    // Smart-feed v1 (services/feed-ranking.ts). Backward-compatible: when
+    // `sort` is anything other than 'smart', the existing behaviour is
+    // untouched. Enabling requires SMART_FEED_ENABLED=true in env.
+    sort: z.enum(['default', 'smart']).default('default'),
+    city: z.string().max(80).optional(),
+    district: z.string().max(120).optional(),
+    propertyType: z.string().max(40).optional(),
+    listingType: z.string().max(40).optional(),
+    minPrice: z.coerce.number().nonnegative().optional(),
+    maxPrice: z.coerce.number().nonnegative().optional(),
+    bedrooms: z.coerce.number().int().nonnegative().optional(),
+  });
+
+  app.get('/v1/properties/feed', async (req) => {
+    const caller = getCaller(req);
+    const q = feedQuery.parse(req.query ?? {});
+    const wantPersonalized =
+      (q.personalized === true || q.personalized === 'true') && config.RECOMMENDATION_ENGINE_ENABLED;
+    const prisma = getPrisma();
+
+    // Base pool for the public feed. A listing surfaces only when BOTH:
+    //   - status === 'available' (seller is open to transactions), AND
+    //   - advertisementLifecycle === 'PUBLISHED' (admin has published it).
+    // VERIFIED is NOT public here — a verified listing is still waiting
+    // for the admin's publish step and must not pre-leak to the homepage.
+    const where = {
+      status: 'available' as const,
+      advertisementLifecycle: 'PUBLISHED' as const,
+    };
+    // Pull a slightly wider pool than pageSize so ranking has room to reorder.
+    const pool = await prisma.property.findMany({
+      where,
+      orderBy: { updatedAt: 'desc' },
+      take: q.pageSize * 5,
+    });
+
+    // ---- Smart feed v1 --------------------------------------------------
+    // Handled BEFORE the personalized/default paths so the query-string
+    // opt-in wins even when the recommendation flag is off. Returns a
+    // scored + diversified page. Falls back to the default order on any
+    // exception so a ranker bug can NEVER break the public feed.
+    if (q.sort === 'smart' && config.SMART_FEED_ENABLED) {
+      try {
+        const ctx: FeedContext = {
+          city: q.city,
+          district: q.district,
+          propertyType: q.propertyType,
+          listingType: q.listingType,
+          minPrice: q.minPrice,
+          maxPrice: q.maxPrice,
+          bedrooms: q.bedrooms,
+        };
+        const scored = pool.map((p) => {
+          const r = calculateFeedScore(p, ctx);
+          return { property: p, ...r };
+        });
+        scored.sort((a, b) => b.score - a.score);
+        const diversified = diversifyFeed(scored);
+        const paged = diversified.slice((q.page - 1) * q.pageSize, q.page * q.pageSize);
+        // Debug fields (_score, _reasons, qualityScore) are exposed only
+        // in non-production envs so prod callers see the same public
+        // shape as the default feed.
+        const includeDebug = config.NODE_ENV !== 'production';
+        const mediaMap = await projectFeedMedia(paged.map(s => s.property.id));
+        return jsonSafe({
+          items: paged.map((s) => ({
+            ...publicProjection(s.property),
+            media: mediaMap.get(s.property.id) ?? [],
+            ...(includeDebug ? { _score: s.score, _reasons: s.reasons, qualityScore: s.qualityScore } : {}),
+          })),
+          page: q.page,
+          pageSize: q.pageSize,
+          total: scored.length,
+          ranking: 'smart',
+        });
+      } catch (err) {
+        req.log.error({ err }, 'smart feed ranker failed; falling back to default');
+        // fall through to default response
+      }
+    }
+
+    if (!wantPersonalized) {
+      const slice = pool.slice((q.page - 1) * q.pageSize, q.page * q.pageSize);
+      const mediaMap = await projectFeedMedia(slice.map(p => p.id));
+      const items = slice.map(p => ({
+        ...publicProjection(p),
+        media: mediaMap.get(p.id) ?? [],
+      }));
+      return jsonSafe({
+        items,
+        page: q.page,
+        pageSize: q.pageSize,
+        total: pool.length,
+        ranking: 'default',
+      });
+    }
+
+    try {
+      // Load the last 400 events for this caller (bounded — recency matters more).
+      let profile = { hasSignal: false } as ReturnType<typeof buildPreferenceProfile>;
+      if (caller) {
+        const events = await prisma.userEvent.findMany({
+          where: { userId: caller.userId },
+          orderBy: { createdAt: 'desc' },
+          take: 400,
+          select: { eventType: true, city: true, district: true, propertyType: true, purpose: true, priceHalalahs: true, createdAt: true },
+        });
+        profile = buildPreferenceProfile(events);
+      }
+
+      const now = new Date();
+      const scored = pool.map((p) => {
+        const quality = computeQualityScore({
+          hasCategory: !!p.category,
+          hasPurpose: !!p.purpose,
+          hasListingNumber: !!p.listingNumber,
+          imageCount: 0, // MediaAsset count wiring — deferred (see NOT IMPLEMENTED)
+          advertisementLifecycle: p.advertisementLifecycle,
+          hasRegaLicense: !!p.regaLicenseNumber,
+          createdAt: p.createdAt,
+          now,
+        });
+        const scorable = {
+          id: p.id,
+          category: p.category,
+          purpose: p.purpose,
+          city: null,          // Property lacks city — populated when events tag it
+          district: null,
+          priceHalalahs: null, // Property lacks price — same
+          qualityScore: quality,
+          createdAt: p.createdAt,
+        };
+        const result = profile.hasSignal
+          ? scorePropertyForUser(profile, scorable, now)
+          : scorePropertyColdStart(scorable, now);
+        return { property: p, ...result };
+      });
+
+      scored.sort((a, b) => b.score - a.score);
+      const paged = scored.slice((q.page - 1) * q.pageSize, q.page * q.pageSize);
+      const mediaMap = await projectFeedMedia(paged.map(s => s.property.id));
+      return jsonSafe({
+        items: paged.map(s => ({
+          ...publicProjection(s.property),
+          media: mediaMap.get(s.property.id) ?? [],
+          _score: s.score,
+          _reasons: s.reasons,
+        })),
+        page: q.page,
+        pageSize: q.pageSize,
+        total: scored.length,
+        ranking: profile.hasSignal ? 'personalized' : 'cold_start',
+      });
+    } catch (err) {
+      // Engine failure must NEVER break the user's feed — fall back.
+      req.log.error({ err }, 'recommendation engine failed; falling back to default feed');
+      const slice = pool.slice((q.page - 1) * q.pageSize, q.page * q.pageSize);
+      const mediaMap = await projectFeedMedia(slice.map(p => p.id));
+      const items = slice.map(p => ({
+        ...publicProjection(p),
+        media: mediaMap.get(p.id) ?? [],
+      }));
+      return jsonSafe({
+        items,
+        page: q.page,
+        pageSize: q.pageSize,
+        total: pool.length,
+        ranking: 'fallback',
+      });
+    }
+  });
+
+  /**
+   * PATCH /v1/properties/:id/details — owner-only write for the
+   * Property Data v2 fields.
+   *
+   * - All fields are optional; unspecified keys are left untouched.
+   * - The caller MUST be the property's `ownerId` (or an admin).
+   * - Old clients that never send this payload are unaffected — this
+   *   endpoint is purely additive.
+   * - We NEVER accept `ownerId`, `officeId`, `status`,
+   *   `advertisementLifecycle`, or any REGA / lifecycle field here —
+   *   those are governed by dedicated compliance routes.
+   */
+  const detailsBody = z
+    .object({
+      city: z.string().min(1).max(80).nullable().optional(),
+      district: z.string().min(1).max(120).nullable().optional(),
+      addressText: z.string().min(1).max(500).nullable().optional(),
+      latitude: z.number().min(-90).max(90).nullable().optional(),
+      longitude: z.number().min(-180).max(180).nullable().optional(),
+      priceHalalahs: z.union([z.number(), z.string()]).nullable().optional()
+        .transform((v) => v === null || v === undefined ? v : BigInt(String(v)))
+        .refine((v) => v === null || v === undefined || v >= 0n, 'priceHalalahs must be ≥ 0'),
+      pricePeriod: z.enum(['TOTAL', 'YEAR', 'MONTH', 'WEEK', 'DAY']).nullable().optional(),
+      areaSqm: z.number().int().min(0).max(1_000_000).nullable().optional(),
+      landAreaSqm: z.number().int().min(0).max(10_000_000).nullable().optional(),
+      builtAreaSqm: z.number().int().min(0).max(1_000_000).nullable().optional(),
+      bedrooms: z.number().int().min(0).max(50).nullable().optional(),
+      bathrooms: z.number().int().min(0).max(50).nullable().optional(),
+      livingRooms: z.number().int().min(0).max(50).nullable().optional(),
+      kitchens: z.number().int().min(0).max(20).nullable().optional(),
+      floorNumber: z.number().int().min(-10).max(200).nullable().optional(),
+      totalFloors: z.number().int().min(0).max(200).nullable().optional(),
+      propertyAgeYears: z.number().int().min(0).max(200).nullable().optional(),
+      yearBuilt: z.number().int().min(1800).max(2200).nullable().optional(),
+      furnished: z.boolean().nullable().optional(),
+      parkingSpaces: z.number().int().min(0).max(500).nullable().optional(),
+      hasElevator: z.boolean().nullable().optional(),
+      hasPool: z.boolean().nullable().optional(),
+      hasBalcony: z.boolean().nullable().optional(),
+      hasYard: z.boolean().nullable().optional(),
+      hasMaidRoom: z.boolean().nullable().optional(),
+      hasDriverRoom: z.boolean().nullable().optional(),
+      hasAirConditioning: z.boolean().nullable().optional(),
+    })
+    .strict(); // unknown / suspicious keys are rejected
+
+  app.patch('/v1/properties/:id/details', async (req, reply) => {
+    const caller = requireAuth(req, reply);
+    const { id } = req.params as { id: string };
+    const body = detailsBody.parse(req.body ?? {});
+    const prisma = getPrisma();
+    const existing = await prisma.property.findUnique({ where: { id }, select: { id: true, ownerId: true, status: true } });
+    if (!existing) throw notFound('property not found');
+    if (existing.ownerId !== caller.userId && !isAdminRole(caller.role)) {
+      // 404 rather than 403 — never confirm existence to non-owners.
+      throw notFound('property not found');
+    }
+    const data: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(body)) {
+      if (v !== undefined) data[k] = v; // null is a valid intent (clear the value)
+    }
+    if (Object.keys(data).length === 0) {
+      return jsonSafe(await prisma.property.findUnique({ where: { id } }));
+    }
+    const updated = await prisma.property.update({ where: { id }, data });
+    return jsonSafe(updated);
+  });
+
+  /**
+   * GET /v1/properties/mine — caller's own properties for the "عقاراتي"
+   * screen. Returns every listing the caller owns, regardless of status
+   * or REGA lifecycle (owner sees drafts + hidden + published alike).
+   */
+  app.get('/v1/properties/mine', async (req, reply) => {
+    const caller = requireAuth(req, reply);
+    const rows = await getPrisma().property.findMany({
+      where: { ownerId: caller.userId },
+      orderBy: { updatedAt: 'desc' },
+      take: 200,
+    });
+    return jsonSafe({ items: rows });
+  });
+
+  /**
+   * POST /v1/properties/mine — create a DRAFT property owned by the
+   * caller. Only the two required-by-schema fields (`category`,
+   * `purpose`) are accepted here; the owner fills the rest via
+   * PATCH /v1/properties/:id/details afterwards.
+   *
+   * The row is created with:
+   *   - ownerId = caller.userId (server-derived; never trusted from body)
+   *   - status = 'hidden' so a bare draft never appears in the public feed
+   *   - advertisementLifecycle = 'DRAFT' (schema default)
+   *
+   * Publishing still requires the existing REGA compliance flow
+   * (submit → verify → publish) — this endpoint deliberately does NOT
+   * shortcut it.
+   */
+  const createBody = z.object({
+    category: z.string().min(2).max(40),
+    purpose: z.string().min(2).max(40),
+    currency: z.string().min(3).max(3).default('SAR'),
+  }).strict();
+
+  app.post('/v1/properties/mine', async (req, reply) => {
+    const caller = requireAuth(req, reply);
+    const body = createBody.parse(req.body ?? {});
+    const listingNumber = `SH-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`.toUpperCase();
+    const created = await getPrisma().property.create({
+      data: {
+        listingNumber,
+        ownerId: caller.userId,
+        category: body.category,
+        purpose: body.purpose,
+        currency: body.currency,
+        status: 'hidden', // drafts are never publicly listed
+      },
+    });
+    return reply.code(201).send(jsonSafe(created));
   });
 }

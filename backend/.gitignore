@@ -11,3 +11,7 @@ prisma/migrations/**/migration_lock.toml.bak
 coverage/
 *.log
 .DS_Store
+
+# Belt-and-braces: nested SQLite artifact that Prisma can create when
+# DATABASE_URL includes prisma/ (schema-relative resolution). Never commit.
+prisma/prisma/

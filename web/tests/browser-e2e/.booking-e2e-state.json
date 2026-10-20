@@ -1,0 +1,48 @@
+{
+  "ownerPhone": "+9660088880",
+  "customerPhones": {
+    "happyPath": "+9660088881",
+    "doubleClick": "+9660088882",
+    "overlap": "+9660088883",
+    "failureRetry": "+9660088884"
+  },
+  "property": {
+    "id": "cmvdfyqn1000e308mgtry55w3",
+    "listingNumber": "BK-E2E-1792304737884",
+    "district": "حي BK-E2E-1792304737884"
+  },
+  "windows": {
+    "happyPath": {
+      "startOffsetDays": 2,
+      "nights": 2,
+      "checkIn": "2026-10-20T00:00:00.000Z",
+      "checkOut": "2026-10-22T00:00:00.000Z",
+      "checkInYmd": "2026-10-20",
+      "checkOutYmd": "2026-10-22"
+    },
+    "doubleClick": {
+      "startOffsetDays": 10,
+      "nights": 2,
+      "checkIn": "2026-10-28T00:00:00.000Z",
+      "checkOut": "2026-10-30T00:00:00.000Z",
+      "checkInYmd": "2026-10-28",
+      "checkOutYmd": "2026-10-30"
+    },
+    "overlap": {
+      "startOffsetDays": 20,
+      "nights": 3,
+      "checkIn": "2026-11-07T00:00:00.000Z",
+      "checkOut": "2026-11-10T00:00:00.000Z",
+      "checkInYmd": "2026-11-07",
+      "checkOutYmd": "2026-11-10"
+    },
+    "failureRetry": {
+      "startOffsetDays": 30,
+      "nights": 2,
+      "checkIn": "2026-11-17T00:00:00.000Z",
+      "checkOut": "2026-11-19T00:00:00.000Z",
+      "checkInYmd": "2026-11-17",
+      "checkOutYmd": "2026-11-19"
+    }
+  }
+}

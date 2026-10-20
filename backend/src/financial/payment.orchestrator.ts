@@ -110,7 +110,15 @@ export async function capturePayment(args: {
   await prisma.$transaction(async (tx) => {
     const payment = await tx.payment.findUnique({ where: { id: args.paymentId }, include: { booking: { include: { property: true } } } });
     if (!payment) throw notFound(`payment ${args.paymentId} not found`);
-    if (payment.status === 'captured') return; // idempotent
+    // Idempotent terminal states: a second webhook arriving on an
+    // already-captured OR already-orphaned payment is a replay. Return
+    // without touching the row, without emitting another PaymentEvent,
+    // and without a second audit entry. The webhook route dedupes by
+    // (provider, externalEventId) at an outer layer; this is the
+    // last-ditch guard in case the dedupe table was wiped or a
+    // different webhook payload resurrects an old providerPaymentId.
+    if (payment.status === 'captured') return;
+    if (payment.status === 'captured_orphan') return;
     if (payment.status !== 'pending') throw conflict(`payment in status ${payment.status}, cannot capture`);
     if (payment.providerPaymentId !== args.providerPaymentId) throw badRequest('provider payment id mismatch');
     // Amount + currency verification — never trust the webhook body blindly.
@@ -124,6 +132,42 @@ export async function capturePayment(args: {
       throw badRequest('payment has no booking; cannot capture in this flow');
     }
 
+    // Late-payment guard. The booking-expiry worker may have cancelled
+    // the booking (draft or pending_payment past TTL) between
+    // startCheckout and the webhook's arrival. We mark the payment
+    // orphaned instead of flipping the booking back to confirmed —
+    // the operator reconciles via refund. Without this guard a late
+    // webhook could resurrect a booking whose dates have been reused
+    // by a new customer, creating a silent double-booking.
+    if (payment.booking && payment.booking.status === 'cancelled') {
+      await tx.payment.update({
+        where: { id: args.paymentId },
+        data: {
+          status: 'captured_orphan',
+          capturedAt: new Date(),
+          providerStatus: 'captured',
+          // Carry the gross forward literally — this is the amount the
+          // PSP successfully charged, which is what the operator must
+          // refund (or clear via admin review).
+          grossAmountHalalahs: payment.grossAmountHalalahs,
+        },
+      });
+      await tx.paymentEvent.create({
+        data: {
+          paymentId: args.paymentId,
+          kind: 'captured_orphan',
+          data: JSON.stringify({
+            reason: 'booking_already_cancelled',
+            bookingId: payment.booking.id,
+            amountHalalahs: payment.grossAmountHalalahs.toString(),
+            currency: payment.currency,
+            refundPath: 'admin-review',
+          }),
+        },
+      });
+      return;
+    }
+
     const gatewayFee = args.gatewayFeeHalalahs ?? 0n;
     await tx.payment.update({
       where: { id: args.paymentId },
@@ -131,14 +175,50 @@ export async function capturePayment(args: {
     });
     await tx.paymentEvent.create({ data: { paymentId: args.paymentId, kind: 'captured', data: JSON.stringify({ gatewayFee: gatewayFee.toString() }) } });
 
-    if (payment.booking) {
-      await tx.booking.update({ where: { id: payment.booking.id }, data: { status: 'confirmed', confirmedAt: new Date() } });
+    // Confirm the booking ONLY if it is still eligible. A booking in
+    // 'cancelled' would be caught by the guard above; anything else
+    // (draft, pending_payment) is normal.
+    if (payment.booking && payment.booking.status !== 'confirmed') {
+      await tx.booking.update({
+        where: { id: payment.booking.id },
+        data: { status: 'confirmed', confirmedAt: new Date() },
+      });
     }
   });
 
-  // Outside the tx: post ledger, create settlement + invoice.
+  // Outside the tx: post ledger, create settlement + invoice. We only
+  // run this for the normal captured path — a `captured_orphan` row
+  // represents money that reached us against a cancelled booking; the
+  // operator refunds via a separate flow and the ledger stays clean.
   const payment = await getPrisma().payment.findUnique({ where: { id: args.paymentId }, include: { booking: { include: { property: true } } } });
   if (!payment?.booking) return;
+  if (payment.status === 'captured_orphan') {
+    // Audit the orphan transition only ONCE per payment. We detect
+    // "first transition" by the absence of any PAYMENT.CAPTURED_ORPHAN
+    // row in the audit log — the row we're about to write. A replay
+    // (second webhook) sees the existing row and short-circuits so
+    // operator alerts and refund workflows aren't double-fired.
+    const existing = await getPrisma().auditLog.findFirst({
+      where: { entity: 'Payment', entityId: payment.id, action: 'PAYMENT.CAPTURED_ORPHAN' },
+      select: { id: true },
+    });
+    if (!existing) {
+      await audit({
+        action: 'PAYMENT.CAPTURED_ORPHAN',
+        entity: 'Payment',
+        entityId: payment.id,
+        after: {
+          bookingId: payment.booking.id,
+          amountHalalahs: payment.grossAmountHalalahs.toString(),
+          currency: payment.currency,
+          providerPaymentId: payment.providerPaymentId,
+          refundPath: 'admin-review',
+        },
+      });
+    }
+    return;
+  }
+  if (payment.status !== 'captured') return;
 
   const quoteFromMetadata = payment.metadata ? deserialiseQuote(JSON.parse(payment.metadata).quote) : null;
   if (!quoteFromMetadata) return;
@@ -171,7 +251,7 @@ export async function capturePayment(args: {
 
 // ---------------- Quote serialisation (BigInt-safe) ----------------
 
-function serialiseQuote(q: Quote): unknown {
+export function serialiseQuote(q: Quote): unknown {
   return JSON.parse(JSON.stringify(q, (_, v) => typeof v === 'bigint' ? { __bi: v.toString() } : v));
 }
 function deserialiseQuote(v: unknown): Quote {

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { SandboxProvider } from '../src/providers/sandbox.js';
-import { MoyasarProvider } from '../src/providers/moyasar.stub.js';
+import { MoyasarProvider } from '../src/providers/moyasar.js';
 import { TapProvider } from '../src/providers/tap.stub.js';
 
 describe('providers — stubs refuse without secrets', () => {

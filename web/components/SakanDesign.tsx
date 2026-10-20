@@ -46,6 +46,13 @@ export default function SakanDesign() {
     // We deliberately do NOT remove the stylesheet on unmount — the
     // design's global tokens are cheap to keep around and re-navigating
     // back would otherwise refetch a large file.
+
+    // Expose the API base URL to the vanilla SPA so its inline tracker
+    // (see app.js `_trackEvent`) can POST to /v1/events. Empty string
+    // means "no backend wired" and the tracker no-ops silently, which
+    // is exactly what we want during the flag rollout window.
+    (window as unknown as { __SAKAN_API_BASE?: string }).__SAKAN_API_BASE =
+      process.env.NEXT_PUBLIC_API_BASE_URL || '';
   }, []);
 
   return (

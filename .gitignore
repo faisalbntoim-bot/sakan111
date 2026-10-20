@@ -1,0 +1,10 @@
+# Root .gitignore — introduced on the preview/sakanhub-staging branch.
+#
+# preview-data/ holds the Codespace preview's isolated SQLite file,
+# generated secrets (JWT + media-signing HMAC), uploaded media, and
+# process logs. Everything inside stays on the Codespace. Never commit.
+preview-data/
+
+# OS clutter
+.DS_Store
+Thumbs.db

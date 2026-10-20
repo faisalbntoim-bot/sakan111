@@ -27,6 +27,10 @@ async function seedInventory() {
         category: i % 2 === 0 ? 'apartment' : 'villa',
         purpose: 'daily',
         status: i < 20 ? 'available' : 'hidden',
+        // Hardened pricing policy: a listing without priceHalalahs is
+        // not bookable as a daily rental. Seed a nominal daily rate.
+        priceHalalahs: BigInt(300 * 100),
+        pricePeriod: 'DAY',
       },
     }));
   }

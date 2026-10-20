@@ -55,11 +55,13 @@ export async function resetDb() {
     prisma.refreshToken.deleteMany(),
     prisma.complaint.deleteMany(),
     prisma.advertiserVerification.deleteMany(),
-    prisma.tourHotspot.deleteMany(),
-    prisma.propertyTour.deleteMany(),
-    prisma.mediaProcessingJob.deleteMany(),
     prisma.mediaAsset.deleteMany(),
+    prisma.pendingUpload.deleteMany(),
   ]);
+  // Also flush the sandbox provider's in-memory object store so bytes
+  // written by one test do not leak into the next.
+  const { _sandboxReset } = await import('../src/storage/sandbox.js');
+  _sandboxReset();
 }
 
 export async function seedRules() {

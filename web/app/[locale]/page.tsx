@@ -8,9 +8,10 @@ import CTA from '@/components/CTA';
 import Footer from '@/components/Footer';
 import SakanDesign from '@/components/SakanDesign';
 
-export default function LocalePage({ params }: { params: { locale: string } }) {
-  if (!locales.includes(params.locale as Locale)) notFound();
-  const locale = params.locale as Locale;
+export default async function LocalePage({ params }: { params: Promise<{ locale: string }> }) {
+  const { locale: rawLocale } = await params;
+  if (!locales.includes(rawLocale as Locale)) notFound();
+  const locale = rawLocale as Locale;
 
   // The Arabic main page is the full product design (JS-driven SPA).
   // The English page keeps the marketing layout — those components are

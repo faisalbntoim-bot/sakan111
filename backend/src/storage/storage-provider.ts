@@ -16,12 +16,15 @@
 export type MediaKind = 'image' | 'video' | 'document';
 export type Visibility = 'private' | 'public';
 
-export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024; // 25 MB — refuse anything larger
+export const MAX_UPLOAD_BYTES = 500 * 1024 * 1024; // 500 MB — outer safety net (per-file limits in config)
 
-/** MIME allowlist per kind — server rejects anything outside this list. */
+/** MIME allowlist per kind — server rejects anything outside this list.
+ *  Codec parameters (e.g. `video/webm;codecs=vp9,opus`) are stripped by
+ *  the client before hitting `assertUploadShape`, so only the base MIME
+ *  needs to appear here. */
 export const ALLOWED_CONTENT_TYPES: Record<MediaKind, string[]> = {
-  image:    ['image/jpeg', 'image/png', 'image/webp', 'image/heic'],
-  video:    ['video/mp4', 'video/quicktime'],
+  image:    ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'],
+  video:    ['video/mp4', 'video/quicktime', 'video/webm'],
   document: ['application/pdf'],
 };
 
@@ -52,6 +55,22 @@ export interface SignedDownloadResult {
   expiresAt: Date;
 }
 
+/** What the provider can tell us about a persisted object.
+ *  Returned by `head()` and used by /v1/media finalize to prove that the
+ *  bytes at `providerKey` match the size + content-type + sha256 the client
+ *  registered — no more trusting body values blindly. */
+export interface StoredObjectStat {
+  /** Actual byte length as the provider sees it. Never trust the client's number. */
+  sizeBytes: number;
+  /** Base MIME derived from the object's first bytes (magic-byte detection),
+   *  NOT from the request Content-Type header (which the client controls). */
+  detectedContentType: string | null;
+  /** Server-computed SHA-256 of the bytes. Present only when the provider
+   *  can read the object cheaply enough to hash it (local: always; s3:
+   *  optional; sandbox: never). Callers must handle `null`. */
+  sha256: string | null;
+}
+
 export interface StorageProvider {
   readonly name: string;
   /** Malware-scanning hook. Implementations may forward to ClamAV / VirusTotal. */
@@ -59,6 +78,37 @@ export interface StorageProvider {
 
   signUpload(input: SignedUploadRequest): Promise<SignedUploadResult>;
   signDownload(providerKey: string, ttlSeconds?: number): Promise<SignedDownloadResult>;
+
+  /** Atomically move a freshly-uploaded object into an attempt-scoped
+   *  quarantine location the client cannot address. This is what closes
+   *  the TOCTOU window between HEAD-verify and publish: nothing the caller
+   *  or a racing PUT can do reaches the file after `stage()` returns.
+   *
+   *  - Throws `NOT_FOUND` when no bytes exist at `stagingKey`.
+   *  - Throws `ALREADY_STAGED` when `verifyingKey` already exists (belt-
+   *    and-braces vs. a race where two attempts pick the same uuid). */
+  stage(stagingKey: string, verifyingKey: string): Promise<void>;
+
+  /** Delete a quarantine-tier object (`verifying/…`). Used when
+   *  verification of the staged bytes fails and finalize needs to
+   *  abandon the attempt. Idempotent — missing is not an error. */
+  unstage(verifyingKey: string): Promise<void>;
+
+  /** Return live stats for the uploaded object. Called by finalize on
+   *  the verifying key AFTER stage() has moved it out of reach. Providers
+   *  MUST return a non-null `sha256` — finalize refuses the upload
+   *  when the stored bytes cannot be independently hashed. */
+  head(providerKey: string): Promise<StoredObjectStat>;
+
+  /** Move a verified object from its quarantine key (`verifying/…`) to
+   *  its final read-only location (`finalized/…`). Same-tier atomic
+   *  operations (fs.rename / in-memory swap) preferred; providers that
+   *  must copy-then-delete guarantee the source is deleted only after
+   *  the destination is durably visible. */
+  publish(verifyingKey: string, finalKey: string): Promise<void>;
+  /** Optional read-only mark. The two-tier layout above is what actually
+   *  protects the finalized bytes; this is a defence-in-depth extra. */
+  seal?(providerKey: string): Promise<void>;
 }
 
 // ---------------- Validation helpers (shared by all providers) ----------------

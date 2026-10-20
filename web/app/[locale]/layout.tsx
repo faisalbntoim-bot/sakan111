@@ -5,15 +5,16 @@ import { dirFor, getDictionary, locales, type Locale } from '@/lib/i18n';
 
 interface Props {
   children: ReactNode;
-  params: { locale: string };
+  params: Promise<{ locale: string }>;
 }
 
 export function generateStaticParams() {
   return locales.map((locale) => ({ locale }));
 }
 
-export function generateMetadata({ params }: { params: { locale: string } }): Metadata {
-  const locale = (locales.includes(params.locale as Locale) ? params.locale : 'ar') as Locale;
+export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
+  const { locale: rawLocale } = await params;
+  const locale = (locales.includes(rawLocale as Locale) ? rawLocale : 'ar') as Locale;
   const t = getDictionary(locale);
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://sakanhub.example';
   return {
@@ -63,9 +64,10 @@ export const viewport: Viewport = {
   initialScale: 1,
 };
 
-export default function LocaleLayout({ children, params }: Props) {
-  if (!locales.includes(params.locale as Locale)) notFound();
-  const locale = params.locale as Locale;
+export default async function LocaleLayout({ children, params }: Props) {
+  const { locale: rawLocale } = await params;
+  if (!locales.includes(rawLocale as Locale)) notFound();
+  const locale = rawLocale as Locale;
   return (
     <html lang={locale} dir={dirFor(locale)}>
       <body dir={dirFor(locale)}>{children}</body>

@@ -32,6 +32,104 @@ const schema = z.object({
   MAX_REQUEST_BODY_BYTES: z.coerce.number().int().positive().default(100 * 1024),
   /** Optional Sentry DSN. Empty = error tracker is a no-op. Never printed. */
   SENTRY_DSN: z.string().optional().default(''),
+
+  // ---- Recommendation & Market Pulse feature flags (all OFF by default) ----
+  /** Master switch for the /v1/analytics/events endpoint. Off = returns 503. */
+  ANALYTICS_EVENTS_ENABLED: z.coerce.boolean().default(false),
+  /** Ranks GET /v1/properties/feed?personalized=true by Recommendation Score. */
+  RECOMMENDATION_ENGINE_ENABLED: z.coerce.boolean().default(false),
+  /** Enables /v1/market/* routes (returns 503 when off). */
+  MARKET_PULSE_ENABLED: z.coerce.boolean().default(false),
+  /** Minimum event sample size for market pulse growth / trending to be reported. */
+  MARKET_MIN_SAMPLE_SIZE: z.coerce.number().int().min(1).default(30),
+  /** Smart-feed ranking (services/feed-ranking.ts). When true, GET
+   *  /v1/properties/feed accepts ?sort=smart and ranks candidates by
+   *  Quality × Match × Freshness. Default off — the existing feed
+   *  behaviour is unchanged. */
+  SMART_FEED_ENABLED: z.coerce.boolean().default(false),
+  /** Internal event tracking (analytics/event-tracking-service.ts).
+   *  When true, `trackEvent()` writes to `UserEvent` and
+   *  POST /v1/events is live. Default off — no writes happen and the
+   *  endpoint replies with 204 (safe no-op for the frontend). */
+  EVENT_TRACKING_ENABLED: z.coerce.boolean().default(false),
+  /** Recommendations v1 (recommendations/*). When true, GET
+   *  /v1/recommendations and GET /v1/properties/:id/similar rank
+   *  candidates using UserEvent history + Quality Score. Default off
+   *  — endpoints still respond (safe fallback: fresh + high-quality
+   *  listings) so the frontend can call blindly during rollout. */
+  RECOMMENDATIONS_ENABLED: z.coerce.boolean().default(false),
+
+  // ---- Internal service-account token exchange (BFF for the Next.js admin) ----
+  /** Shared secret the Next.js admin BFF presents (as a Bearer) to
+   *  POST /v1/auth/internal-admin-token in order to receive a short-lived
+   *  ADMIN JWT. Must be at least 32 chars; there is NO default value on
+   *  purpose. If unset the endpoint 404s as if it did not exist.
+   *  Never appears in logs or responses. */
+  SAKAN_INTERNAL_ADMIN_SECRET: z.string().min(32).optional(),
+  /** cuid of a real User row whose Role includes ADMIN or SUPER_ADMIN.
+   *  The exchange endpoint looks the user up in Prisma and refuses to
+   *  mint a token unless (a) the row exists and (b) it currently owns
+   *  one of those roles. Rotating the row's role revokes future issuance
+   *  automatically. */
+  SAKAN_INTERNAL_ADMIN_USER_ID: z.string().optional(),
+
+  // ---- Object storage (property images, KYC docs, invoices, tour glbs) ----
+  /** `sandbox` (dev / tests), `local` (production on-disk, same server),
+   *  or `s3` (production signed URLs to a cloud bucket). */
+  STORAGE_PROVIDER: z.enum(['sandbox', 'local', 's3']).default('sandbox'),
+  /** Absolute directory where LocalStorageProvider writes files. Required
+   *  when STORAGE_PROVIDER=local. Never appears in a client response. */
+  LOCAL_STORAGE_DIR: z.string().optional(),
+  /** HMAC key that signs the short-lived local upload URLs. Required
+   *  when STORAGE_PROVIDER=local. At least 32 chars, server-only. */
+  MEDIA_UPLOAD_SIGNING_SECRET: z.string().min(32).optional(),
+  /** Server-side per-file byte limits (defaults are generous enough for
+   *  a typical property listing but a lot less than MAX_UPLOAD_BYTES). */
+  MEDIA_IMAGE_MAX_BYTES: z.coerce.number().int().positive().default(15 * 1024 * 1024),
+  MEDIA_VIDEO_MAX_BYTES: z.coerce.number().int().positive().default(300 * 1024 * 1024),
+
+  // ---- Booking policy ----
+  /** How long a draft booking (status='draft', no payment started) can
+   *  hold its dates before the sweep cancels it. Keep short so a user
+   *  who abandons the review sheet doesn't lock the calendar. */
+  BOOKING_DRAFT_TTL_MINUTES: z.coerce.number().int().positive().default(15),
+  /** How long a pending_payment booking has to complete checkout before
+   *  the sweep cancels it. The existing worker already uses this. */
+  BOOKING_PENDING_TTL_MINUTES: z.coerce.number().int().positive().default(30),
+  /** Explicit opt-in to deriving a daily rate from a monthly-priced
+   *  listing. Default OFF — a listing with pricePeriod=MONTH refuses
+   *  DAILY_RENTAL bookings unless the operator sets this and the
+   *  divisor below. */
+  BOOKING_ALLOW_MONTHLY_TO_DAILY: z.coerce.boolean().default(false),
+  /** Divisor used when the opt-in above is on. 30 is the common policy
+   *  ("thirty-day month"); explicit so an operator reviewing config
+   *  sees exactly what the server does. */
+  BOOKING_MONTH_TO_DAY_DIVISOR: z.coerce.number().int().positive().default(30),
+  /** Interval between automatic booking-expiry sweeps while the
+   *  service runs. 0 disables (fall back to an external cron). */
+  BOOKING_EXPIRY_SWEEP_INTERVAL_MS: z.coerce.number().int().min(0).default(60_000),
+
+  // ---- SMS / OTP ----
+  /** SMS vendor selector. `null` is the safe default — every send
+   *  rejects with 503 so a misconfigured prod never silently drops
+   *  OTPs. `console` is dev/test only and refused in production by
+   *  `assertProdSafety`. Add real vendors (`unifonic`, `twilio`, …)
+   *  as enum values once an adapter lands in src/auth/sms/. */
+  SMS_PROVIDER: z.enum(['null', 'console']).default('null'),
+  MEDIA_VIDEO_MAX_DURATION_SECONDS: z.coerce.number().int().positive().default(180),
+  /** S3-family bucket name. Required when STORAGE_PROVIDER=s3. */
+  S3_BUCKET: z.string().optional(),
+  /** AWS region string (e.g. eu-central-1). For R2 use `auto`. */
+  S3_REGION: z.string().optional(),
+  S3_ACCESS_KEY_ID: z.string().optional(),
+  S3_SECRET_ACCESS_KEY: z.string().optional(),
+  /** Optional custom endpoint. Set for R2 / MinIO / DO Spaces; omit for AWS S3. */
+  S3_ENDPOINT: z.string().url().optional(),
+  /** MinIO / some proxies require path-style addressing. */
+  S3_FORCE_PATH_STYLE: z.coerce.boolean().default(false),
+  /** Optional public base URL when a CDN sits in front of the bucket. Signed
+   *  GET URLs are re-hosted through this base while the signature stays valid. */
+  S3_PUBLIC_BASE_URL: z.string().url().optional(),
 });
 
 export const config = schema.parse(process.env);
@@ -64,6 +162,25 @@ function assertProdSafety(cfg: Config): void {
   }
   if (cfg.CORS_ALLOWED_ORIGINS.trim() === '*') {
     problems.push('CORS_ALLOWED_ORIGINS=* is not allowed in production; whitelist explicit origins');
+  }
+  if (cfg.STORAGE_PROVIDER === 'sandbox') {
+    problems.push('STORAGE_PROVIDER=sandbox is not allowed in production; set STORAGE_PROVIDER=local or STORAGE_PROVIDER=s3');
+  }
+  if (cfg.STORAGE_PROVIDER === 'local') {
+    if (!cfg.LOCAL_STORAGE_DIR)         problems.push('LOCAL_STORAGE_DIR is required when STORAGE_PROVIDER=local');
+    if (!cfg.MEDIA_UPLOAD_SIGNING_SECRET) problems.push('MEDIA_UPLOAD_SIGNING_SECRET (>=32 chars) is required when STORAGE_PROVIDER=local');
+  }
+  if (cfg.SMS_PROVIDER === 'null' || cfg.SMS_PROVIDER === 'console') {
+    problems.push(
+      `SMS_PROVIDER=${cfg.SMS_PROVIDER} is not allowed in production` +
+      ' (set a real vendor adapter in src/auth/sms/ and update the SMS_PROVIDER enum)',
+    );
+  }
+  if (cfg.STORAGE_PROVIDER === 's3') {
+    if (!cfg.S3_BUCKET)            problems.push('S3_BUCKET is required when STORAGE_PROVIDER=s3');
+    if (!cfg.S3_REGION)            problems.push('S3_REGION is required when STORAGE_PROVIDER=s3');
+    if (!cfg.S3_ACCESS_KEY_ID)     problems.push('S3_ACCESS_KEY_ID is required when STORAGE_PROVIDER=s3');
+    if (!cfg.S3_SECRET_ACCESS_KEY) problems.push('S3_SECRET_ACCESS_KEY is required when STORAGE_PROVIDER=s3');
   }
 
   if (problems.length > 0) {

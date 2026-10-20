@@ -77,11 +77,25 @@ describe('booking-expiry worker', () => {
     expect(second.cancelled).not.toContain(b.id);       // already cancelled — no re-work
   });
 
-  it('leaves confirmed and draft bookings alone', async () => {
+  it('leaves confirmed bookings alone (never swept, regardless of age)', async () => {
     const bc = await seedBooking('confirmed', 120);
-    const bd = await seedBooking('draft', 120);
-    const result = await runBookingExpirySweep({ ttlMinutes: 30 });
+    const result = await runBookingExpirySweep({ ttlMinutes: 30, draftTtlMinutes: 15 });
     expect(result.cancelled).not.toContain(bc.id);
+  });
+
+  it('cancels drafts older than draftTtlMinutes so their dates free up', async () => {
+    const bd = await seedBooking('draft', 60); // 60 min old, draftTtl=15
+    const result = await runBookingExpirySweep({ draftTtlMinutes: 15, pendingTtlMinutes: 30 });
+    expect(result.cancelled).toContain(bd.id);
+    const after = await getPrisma().booking.findUnique({ where: { id: bd.id } });
+    expect(after?.status).toBe('cancelled');
+  });
+
+  it('leaves a fresh draft (< draftTtlMinutes) alone', async () => {
+    const bd = await seedBooking('draft', 5); // 5 min old, draftTtl=15
+    const result = await runBookingExpirySweep({ draftTtlMinutes: 15, pendingTtlMinutes: 30 });
     expect(result.cancelled).not.toContain(bd.id);
+    const after = await getPrisma().booking.findUnique({ where: { id: bd.id } });
+    expect(after?.status).toBe('draft');
   });
 });

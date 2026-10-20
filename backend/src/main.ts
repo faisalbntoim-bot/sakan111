@@ -39,9 +39,14 @@ import adminReportRoutes from './routes/admin.reports.js';
 import beneficiaryRoutes from './routes/beneficiaries.js';
 import complaintRoutes from './routes/complaints.js';
 import mediaRoutes from './routes/media.js';
-import mediaProcessingRoutes from './routes/media.processing.js';
-import tourRoutes from './routes/tours.js';
 import adminPropertyRoutes from './routes/admin.properties.js';
+import analyticsRoutes from './routes/analytics.js';
+import marketRoutes from './routes/market.js';
+import adminOverviewRoutes from './routes/admin.overview.js';
+import eventRoutes from './routes/events.js';
+import recommendationRoutes from './routes/recommendations.js';
+import devSandboxRoutes from './routes/dev.sandbox.js';
+import { runBookingExpirySweep } from './workers/booking-expiry.js';
 
 export async function buildServer() {
   const app = Fastify({
@@ -85,6 +90,25 @@ export async function buildServer() {
 
   app.get('/healthz', async () => ({ ok: true, env: config.NODE_ENV }));
 
+  // Register the error handler BEFORE routes so AppError (badRequest/notFound/
+  // conflict/…) maps to the correct HTTP status. Set after registrations,
+  // Fastify's encapsulation keeps the default handler for already-registered
+  // plugins and a thrown `conflict()` surfaces as 500 instead of 409.
+  app.setErrorHandler((err, req, reply) => {
+    // Duck-type on httpStatus so bundler / cross-module identity issues don't
+    // downgrade a known AppError to 500.
+    const e = err as { httpStatus?: number; code?: string; message?: string; details?: unknown; name?: string };
+    if (typeof e.httpStatus === 'number' && (err instanceof AppError || e.code)) {
+      return reply.code(e.httpStatus).send({ error: e.code, message: e.message, details: e.details, requestId: req.id });
+    }
+    if (err instanceof ZodError || e.name === 'ZodError') {
+      return reply.code(400).send({ error: 'VALIDATION', issues: (err as ZodError).issues, requestId: req.id });
+    }
+    req.log.error({ err, reqId: req.id }, 'unhandled error');
+    void errorTracker.captureException(err, { requestId: req.id, method: req.method, path: req.url });
+    return reply.code(500).send({ error: 'INTERNAL', message: 'internal server error', requestId: req.id });
+  });
+
   // Webhook is registered as its own plugin scope so its rawBody parser stays local.
   await app.register(async (scope) => {
     await scope.register(webhookRoutes);
@@ -103,25 +127,53 @@ export async function buildServer() {
   await app.register(beneficiaryRoutes);
   await app.register(complaintRoutes);
   await app.register(mediaRoutes);
-  await app.register(mediaProcessingRoutes);
-  await app.register(tourRoutes);
   await app.register(adminPropertyRoutes);
+  await app.register(analyticsRoutes);
+  await app.register(marketRoutes);
+  await app.register(adminOverviewRoutes);
+  await app.register(eventRoutes);
+  await app.register(recommendationRoutes);
+  await app.register(devSandboxRoutes);
 
-  app.setErrorHandler((err, req, reply) => {
-    // Duck-type on httpStatus so bundler / cross-module identity issues don't
-    // downgrade a known AppError to 500.
-    const e = err as { httpStatus?: number; code?: string; message?: string; details?: unknown; name?: string };
-    if (typeof e.httpStatus === 'number' && (err instanceof AppError || e.code)) {
-      return reply.code(e.httpStatus).send({ error: e.code, message: e.message, details: e.details, requestId: req.id });
-    }
-    if (err instanceof ZodError || e.name === 'ZodError') {
-      return reply.code(400).send({ error: 'VALIDATION', issues: (err as ZodError).issues, requestId: req.id });
-    }
-    req.log.error({ err, reqId: req.id }, 'unhandled error');
-    // Report to error tracker (no-op unless configured — never contains tokens).
-    void errorTracker.captureException(err, { requestId: req.id, method: req.method, path: req.url });
-    return reply.code(500).send({ error: 'INTERNAL', message: 'internal server error', requestId: req.id });
-  });
+  // Automatic booking-expiry sweeper. Keeps calendars honest without
+  // depending on an external cron: a stale draft or pending_payment
+  // row is cancelled on the next tick, not when a test harness
+  // explicitly calls the worker. The interval is configurable
+  // (BOOKING_EXPIRY_SWEEP_INTERVAL_MS); setting it to 0 lets an
+  // operator opt out and run the worker from cron instead.
+  //
+  // Guarantees against races:
+  //   * runBookingExpirySweep's updateMany uses the row's current
+  //     status as a predicate, so a sibling capture flipping the row
+  //     to confirmed between the sweep's read and update is a 0-row
+  //     claim — safe no-op.
+  //   * A capturePayment arriving AFTER the sweep cancels the row
+  //     takes the orphan path (see payment.orchestrator).
+  if (config.BOOKING_EXPIRY_SWEEP_INTERVAL_MS > 0) {
+    const sweeperInterval = config.BOOKING_EXPIRY_SWEEP_INTERVAL_MS;
+    let running = false;
+    const tick = async () => {
+      if (running) return;      // overlap guard — a slow sweep won't stack
+      running = true;
+      try {
+        await runBookingExpirySweep({
+          draftTtlMinutes:   config.BOOKING_DRAFT_TTL_MINUTES,
+          pendingTtlMinutes: config.BOOKING_PENDING_TTL_MINUTES,
+        });
+      } catch (err) {
+        app.log.error({ err }, 'booking-expiry sweep failed');
+      } finally {
+        running = false;
+      }
+    };
+    const handle = setInterval(() => { void tick(); }, sweeperInterval);
+    // Don't keep the Node loop alive just for the sweeper (tests
+    // depend on the server closing cleanly).
+    if (typeof handle.unref === 'function') handle.unref();
+    app.addHook('onClose', async () => { clearInterval(handle); });
+    // Visibility — tests + log scrapes read this through app.decorate.
+    app.decorate('sakanSweeperIntervalMs', sweeperInterval);
+  }
 
   return app;
 }

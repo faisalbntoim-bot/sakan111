@@ -129,7 +129,8 @@ export async function getProvider(): Promise<PaymentProvider> {
       cached = new SandboxProvider(); break;
     }
     case 'moyasar': {
-      const { MoyasarProvider } = await import('./moyasar.stub.js');
+      // Real HTTP integration (test and prod).
+      const { MoyasarProvider } = await import('./moyasar.js');
       cached = new MoyasarProvider(config.MOYASAR_SECRET_KEY, config.MOYASAR_WEBHOOK_SECRET); break;
     }
     case 'tap': {

@@ -1,0 +1,71 @@
+{
+  "name": "SakanHub Preview (private, sandbox-only)",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:1-22-bookworm",
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Port surface
+  //
+  // Only port 3000 (the Next.js app) is forwarded publicly, and it is
+  // kept PRIVATE visibility — only this Codespace's owner, signed in to
+  // github.com, can open the URL. Port 4000 (the Fastify backend) is
+  // deliberately NOT listed here; it stays bound to 127.0.0.1 inside
+  // the container and is reached from the browser only through
+  // Next.js's /v1/* rewrite, so Safari sees ONE HTTPS origin and the
+  // backend is never exposed as a second public URL.
+  //
+  // onAutoForward=notify (not openBrowser) — we don't want the preview
+  // to open automatically on container start; the operator opens it
+  // deliberately from the Ports tab after the postStart script says
+  // the services are live.
+  // ─────────────────────────────────────────────────────────────────────
+  "forwardPorts": [3000],
+  "portsAttributes": {
+    "3000": {
+      "label": "SakanHub Preview (private)",
+      "visibility": "private",
+      "onAutoForward": "notify"
+    }
+  },
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Lifecycle
+  //
+  // postCreateCommand runs ONCE when the Codespace is first built:
+  //   - npm ci in backend/ and web/
+  //   - generate local HMAC + JWT secrets under preview-data/.secrets.env
+  //     (gitignored; never leaves this Codespace)
+  //   - prisma db push against an isolated SQLite file under preview-data/
+  //   - seed owner/admin/customer with explicit role rows
+  //   - build Next.js with the Codespace public URL baked into
+  //     NEXT_PUBLIC_API_BASE_URL and SAKAN_PREVIEW_PROXY=1
+  //
+  // postStartCommand runs on every start (including stop/start cycles):
+  //   - launch backend (sandbox + console SMS) in the background on
+  //     127.0.0.1:4000
+  //   - launch `next start` in the background on 0.0.0.0:3000
+  //   - redirect logs to preview-data/logs/{backend,web}.log
+  //
+  // waitFor=postCreateCommand lets the terminal open only after the
+  // one-time build is done, so the operator never has to guess whether
+  // the preview is ready.
+  // ─────────────────────────────────────────────────────────────────────
+  "postCreateCommand": "bash .devcontainer/postCreate.sh",
+  "postStartCommand": "bash .devcontainer/postStart.sh",
+  "waitFor": "postCreateCommand",
+
+  "containerEnv": {
+    "SAKAN_PREVIEW": "1"
+  },
+
+  "remoteUser": "node",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "prisma.prisma"
+      ]
+    }
+  }
+}

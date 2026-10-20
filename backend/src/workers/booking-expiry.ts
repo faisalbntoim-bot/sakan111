@@ -19,7 +19,14 @@ import { getPrisma } from '../db.js';
 import { audit } from '../audit.js';
 
 export interface BookingExpiryOptions {
+  /** Legacy name — same meaning as `pendingTtlMinutes`. */
   ttlMinutes?: number;
+  /** TTL (minutes) for `pending_payment` bookings waiting on capture. */
+  pendingTtlMinutes?: number;
+  /** TTL (minutes) for `draft` bookings — the window between
+   *  create and `/v1/payments`. Keep short so an abandoned review
+   *  sheet doesn't lock the calendar. */
+  draftTtlMinutes?: number;
   now?: Date;
 }
 
@@ -28,7 +35,8 @@ export interface BookingExpiryResult {
   cancelled: string[];       // booking ids
 }
 
-const DEFAULT_TTL_MINUTES = 30;
+const DEFAULT_PENDING_TTL_MINUTES = 30;
+const DEFAULT_DRAFT_TTL_MINUTES = 15;
 
 /**
  * Sweep expired pending bookings. Returns the ids that were cancelled.
@@ -36,17 +44,22 @@ const DEFAULT_TTL_MINUTES = 30;
  */
 export async function runBookingExpirySweep(opts: BookingExpiryOptions = {}): Promise<BookingExpiryResult> {
   const prisma = getPrisma();
-  const ttl = opts.ttlMinutes ?? DEFAULT_TTL_MINUTES;
-  const cutoff = new Date((opts.now?.getTime() ?? Date.now()) - ttl * 60 * 1000);
+  const pendingTtl = opts.pendingTtlMinutes ?? opts.ttlMinutes ?? DEFAULT_PENDING_TTL_MINUTES;
+  const draftTtl   = opts.draftTtlMinutes   ?? DEFAULT_DRAFT_TTL_MINUTES;
+  const now = opts.now?.getTime() ?? Date.now();
+  const pendingCutoff = new Date(now - pendingTtl * 60 * 1000);
+  const draftCutoff   = new Date(now - draftTtl   * 60 * 1000);
 
-  // Find candidates in ONE query. The predicate on Payment.status guarantees
-  // we never touch a booking whose payment already captured.
+  // Find candidates in ONE query — drafts past their shorter TTL AND
+  // pending_payment bookings past the longer one. The predicate on
+  // Payment.status guarantees we never touch a booking whose payment
+  // already captured (checked defensively below).
   const candidates = await prisma.booking.findMany({
     where: {
-      status: 'pending_payment',
-      createdAt: { lt: cutoff },
-      // Either no payment yet OR every payment is still pending / failed / cancelled.
-      // We check this defensively below anyway.
+      OR: [
+        { status: 'pending_payment', createdAt: { lt: pendingCutoff } },
+        { status: 'draft',           createdAt: { lt: draftCutoff   } },
+      ],
     },
     include: { payments: true },
     take: 500,                   // batch cap; cron re-runs pick up the rest
@@ -60,9 +73,11 @@ export async function runBookingExpirySweep(opts: BookingExpiryOptions = {}): Pr
     const hasCapturedPayment = b.payments.some((p) => p.status === 'captured' || p.status === 'partial_refunded' || p.status === 'refunded');
     if (hasCapturedPayment) continue;
 
-    // Optimistic concurrency: only update rows still in `pending_payment`.
+    // Optimistic concurrency: only update rows still in the status we
+    // observed. If a webhook capture arrived between the read above
+    // and this UPDATE, `claim.count === 0` and we skip — no race.
     const claim = await prisma.booking.updateMany({
-      where: { id: b.id, status: 'pending_payment' },
+      where: { id: b.id, status: b.status },
       data: { status: 'cancelled' },
     });
     if (claim.count === 0) continue;      // another worker or the webhook won the race
@@ -82,7 +97,10 @@ export async function runBookingExpirySweep(opts: BookingExpiryOptions = {}): Pr
       action: 'BOOKING.EXPIRED',
       entity: 'Booking',
       entityId: b.id,
-      after: JSON.stringify({ ttlMinutes: ttl }),
+      after: JSON.stringify({
+        priorStatus: b.status,
+        ttlMinutes: b.status === 'draft' ? draftTtl : pendingTtl,
+      }),
     });
     cancelled.push(b.id);
   }
